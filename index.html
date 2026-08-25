@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Avaliação Técnica HNR — Operador de Caldeiras</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--blue2:#1d4ed8;--green:#16a34a;--red:#dc2626;--amber:#d97706}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+button,input{font:inherit}.hidden{display:none!important}.wrap{max-width:1100px;margin:0 auto;padding:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 8px 30px rgba(15,23,42,.06)}
+.top{background:#0f172a;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;position:sticky;top:0;z-index:10}
+.brand{font-weight:800;letter-spacing:.02em}.muted{color:var(--muted)}.small{font-size:12px}.btn{border:0;border-radius:10px;padding:11px 16px;cursor:pointer;font-weight:700}.primary{background:var(--blue);color:#fff}.primary:hover{background:var(--blue2)}.secondary{background:#e2e8f0;color:#0f172a}.danger{background:#fee2e2;color:#991b1b}.success{background:#dcfce7;color:#166534}
+input{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:12px;background:#f8fafc;outline:none}input:focus{border-color:var(--blue);box-shadow:0 0 0 3px #dbeafe}
+label{display:block;font-weight:700;font-size:13px;margin:0 0 7px}.field{margin-bottom:16px}
+.login{max-width:460px;margin:7vh auto}.login .head{background:#0f172a;color:#fff;padding:30px;text-align:center;border-radius:16px 16px 0 0}.login .body{padding:28px}
+.alert{padding:12px 14px;border-radius:10px;margin-bottom:16px;font-size:13px}.alert.err{background:#fee2e2;color:#991b1b}.alert.ok{background:#dcfce7;color:#166534}.alert.info{background:#dbeafe;color:#1e40af}
+.actions{display:flex;gap:10px;flex-wrap:wrap}.grid{display:grid;gap:16px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admin-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:760px}.table th,.table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}.table th{background:#f8fafc;color:#475569}
+.quiz-layout{display:grid;grid-template-columns:240px 1fr;gap:16px}.side{padding:18px;height:max-content;position:sticky;top:84px}.qnums{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.qnum{border:1px solid var(--line);background:#f8fafc;border-radius:7px;padding:8px;text-align:center;font-size:11px;font-weight:800}.qnum.done{background:#dcfce7;color:#166534;border-color:#bbf7d0}.qnum.current{background:#2563eb;color:#fff;border-color:#2563eb}
+.question{padding:26px}.progress{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden}.progress>div{height:100%;background:#2563eb;transition:width .2s}.qtitle{font-size:19px;line-height:1.5;font-weight:800;margin:18px 0}.option{display:block;border:1px solid var(--line);border-radius:12px;padding:15px;margin:10px 0;cursor:pointer;background:#fff}.option:hover{border-color:#93c5fd;background:#eff6ff}.option.selected{border-color:#2563eb;background:#eff6ff;box-shadow:0 0 0 2px #dbeafe}.option input{width:auto;margin-right:10px}.quiz-footer{display:flex;justify-content:space-between;gap:10px;margin-top:22px}
+.result{text-align:center;padding:28px}.score{font-size:52px;font-weight:900}.review{padding:20px}.review-item{border-top:1px solid var(--line);padding:18px 0}.correct{color:#166534}.wrong{color:#991b1b}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal .box{background:#fff;border-radius:16px;max-width:650px;width:100%;padding:24px;max-height:90vh;overflow:auto}
+@media(max-width:800px){.quiz-layout{grid-template-columns:1fr}.side{position:static}.grid2,.grid3{grid-template-columns:1fr}.wrap{padding:12px}.question{padding:18px}.top{padding:14px}.top .small{display:none}.qtitle{font-size:17px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="module">
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+/* ============================================================
+   CONFIGURAÇÃO
+   O arquivo já vem com a configuração do projeto original.
+   Se você criar outro projeto Firebase, substitua estes valores.
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "AIzaSyDQxAnhIwrQe-Q71HH7cHCJDo6LT_nFeeU",
+  authDomain: "gen-lang-client-0452873302.firebaseapp.com",
+  projectId: "gen-lang-client-0452873302",
+  storageBucket: "gen-lang-client-0452873302.firebasestorage.app",
+  messagingSenderId: "588014755598",
+  appId: "1:588014755598:web:9599bbff74c5d9be03c15f",
+  measurementId: ""
+};
+const FIRESTORE_DATABASE_ID = "ai-studio-bf0e812b-a02f-4585-87dd-51091859cd40";
+
+/* CPF administrativo inicial. O usuário admin deve ser criado
+   uma vez em Firebase Authentication usando:
+   CPF: 08007692444
+   Senha: a senha definida por você no Firebase.
+*/
+const ADMIN_CPF = "08007692444";
+const ADMIN_EMAIL = `${ADMIN_CPF}@admin.hnr.local`;
+
+const appFirebase = initializeApp(firebaseConfig);
+const auth = getAuth(appFirebase);
+const db = getFirestore(appFirebase, FIRESTORE_DATABASE_ID);
+
+const QUESTIONS = [{"id":"1","text":"De acordo com a subseção 13.4.1.2 da Norma Regulamentadora 13, qual é a consequência direta e imediata estabelecida caso uma caldeira seja flagrada operando sem a supervisão e o controle de um operador de caldeira qualificado?","options":{"A":"Critério administrativo passível apenas de advertência por escrito no Livro de Ordem.","B":"Classificação imediata como Risco Grave e Iminente (RGI), sujeitando o ativo à interdição imediata pela fiscalização do trabalho.","C":"Concessão de prazo de até 30 dias para a regularização dos certificados de treinamento do pessoal técnico.","D":"Obrigatoriedade de conversão da operação manual para o modo 100% automático sem necessidade de operador."},"correct":"B"},{"id":"2","text":"O Anexo 1, item 1.1 da NR-13 determina que, para um profissional ser legalmente considerado operador de caldeira, ele deve cumprir obrigatoriamente duas etapas de qualificação. Quais são essas duas etapas?","options":{"A":"Ensino médio completo e aprovação em exame de proficiência em engenharia mecânica.","B":"Certificado do Treinamento de Segurança na Operação de Caldeiras e comprovação de estágio prático supervisionado realizado na própria unidade onde irá trabalhar.","C":"Curso técnico em instrumentação e 100 horas de operação remota de vasos de pressão.","D":"Validação de certificados de conformidade internacional e treinamento em ensaios não destrutivos."},"correct":"B"},{"id":"3","text":"Durante a rotina de partida de uma caldeira que utiliza óleo combustível, o operador precisa realizar o condicionamento térmico do insumo. Qual é a temperatura mínima que o óleo deve atingir no queimador para que o sistema esteja em condições de iniciar a sequência de partida da combustão de forma segura?","options":{"A":"Temperatura de 40 graus Celsius (equivalente a 104 graus Fahrenheit ou 313,15 Kelvin).","B":"Temperatura de 50 graus Celsius (equivalente a 122 graus Fahrenheit ou 323,15 Kelvin).","C":"Temperatura acima de 60 graus Celsius (equivalente a 140 graus Fahrenheit ou 333,15 Kelvin).","D":"Temperatura de 100 graus Celsius (equivalente a 212 graus Fahrenheit ou 373,15 Kelvin)."},"correct":"C"},{"id":"4","text":"No procedimento de partida com a caldeira fria e a água em nível normal, ocorre um fenômeno físico específico após algum tempo de aquecimento, decorrente da dilatação volumétrica da água. Qual ação o operador deve tomar ao observar que o nível subiu excessivamente, possivelmente cobrindo todo o visor?","options":{"A":"Desligar a bomba de alimentação e abrir a válvula principal de saída de vapor em carga máxima.","B":"Ignorar o visor, dado que o programador de combustão controlará o intertravamento de nível máximo de forma isolada.","C":"Proceder imediatamente à descarga de fundo até restabelecer o nível normal de operação.","D":"Injetar produtos químicos adicionais para aumentar a densidade do fluido e forçar o retorno ao nível normal."},"correct":"C"},{"id":"5","text":"Ao atingir a pressão normal de trabalho, a abertura da válvula de saída de vapor não deve ser feita de maneira brusca. Qual é a justificativa técnica para que essa operação seja realizada de forma extremamente lenta?","options":{"A":"Prevenir o superaquecimento do pressostato de pressão máxima e evitar a queima do painel de comando.","B":"Prevenir a ocorrência de golpe de aríete e mitigar o risco de choque térmico nas tubulações e estruturas do ativo.","C":"Garantir que o lodo acumulado no fundo do costado seja arrastado para a linha de vapor.","D":"Permitir que a válvula de segurança abra simultaneamente para calibrar o fluxo de saída."},"correct":"B"},{"id":"6","text":"Durante a rotina de partida, a válvula geral de entrada de água deve permanecer fechada até que a caldeira atinja uma pressão específica, após o que deverá ser aberta. Qual é esse valor de pressão inicial?","options":{"A":"Cerca de 100 kPa (equivalente a 1,01 kgf/cm² ou 14,5 psig).","B":"Cerca de 270 kPa (equivalente a 2,1 kgf/cm² ou 30 psig).","C":"Cerca de 345 kPa (equivalente a 3,5 kgf/cm² ou 50 psig).","D":"Cerca de 500 kPa (equivalente a 5,1 kgf/cm² ou 72,5 psig)."},"correct":"C"},{"id":"7","text":"A descarga de fundo é uma operação crítica para a longevidade e segurança da caldeira. Para a eliminação eficiente da lama acumulada na região inferior do costado, qual técnica de acionamento das válvulas é descrita como a mais eficaz?","options":{"A":"Aberturas parciais e graduais da válvula ao longo de todo o turno de trabalho.","B":"Descargas frequentes e de curta duração, abrindo a válvula rápida e totalmente.","C":"Uma única descarga prolongada realizada exclusivamente quando a caldeira estiver operando em carga máxima.","D":"Manutenção da válvula de purga continuamente semiaberta para eliminação constante por arraste passivo."},"correct":"B"},{"id":"8","text":"O acúmulo exagerado de lama e sólidos no fundo da caldeira, caso não seja tratado de forma eficiente por meio das descargas de fundo, introduz um risco estrutural extremo na fornalha. Qual é o mecanismo físico que pode levar à deformação e até mesmo a explosões na fornalha nessas condições?","options":{"A":"Reação química exotérmica entre a lama e o concreto refratário do combustor.","B":"Superaquecimento da chapa metálica da fornalha devido ao isolamento térmico causado pelo contato direto com a lama.","C":"Aumento repentino da modulação para \"\"fogo máximo\"\" acionado pelo sensor de chama.","D":"Bloqueio mecânico permanente das alavancas externas das válvulas de segurança."},"correct":"B"},{"id":"9","text":"Com relação às restrições operacionais e de manutenção das válvulas de segurança, qual das seguintes práticas é expressamente proibida pelo padrão técnico de segurança do equipamento?","options":{"A":"Acionar a alavanca de teste uma vez por semana quando a caldeira estiver na pressão máxima de trabalho.","B":"Executar o teste hidrostático da caldeira mantendo as válvulas de segurança instaladas e utilizando travas mecânicas.","C":"Verificar o funcionamento da vedação instantânea logo após a queda de pressão do sistema.","D":"Isolar a área de descarga para garantir que não existam pessoas nas proximidades dos coletores de alívio."},"correct":"B"},{"id":"10","text":"No primeiro acendimento da caldeira fria (com água à temperatura ambiente e sem pressão), a velocidade de aquecimento deve ser rigidamente controlada. Qual procedimento o operador deve adotar no sistema de modulação para garantir a acomodação segura das partes metálicas que se dilatam?","options":{"A":"Acionar o sistema diretamente em modulação automática de \"\"fogo máximo\"\" para acelerar a ebulição.","B":"Manter o comutador desligado e realizar o acendimento manual utilizando combustíveis voláteis na chaminé.","C":"Acionar o sistema de modulação em \"\"fogo mínimo\"\" até que a pressão interna atinja aproximadamente 345 kPa (equivalente a 3,5 kgf/cm² ou 50 psig).","D":"Ajustar a bomba de alimentação de água para vazão máxima sem aguardar o aquecimento inicial."},"correct":"C"},{"id":"11","text":"Qual item da norma determina que o operador deve permanecer em local próximo para monitoramento e controle remoto, desde que haja sistemas de segurança para interrupção automática?","options":{"A":"Item 13.4.1.2","B":"Item 13.4.1.2.1","C":"Item 13.4.1.6","D":"Item 13.4.1.7"},"correct":"B"},{"id":"12","text":"Qual a obrigação do operador estabelecida pelo item 13.4.1.6 da NR-13?","options":{"A":"Interromper a operação ao detectar riscos.","B":"Realizar testes hidrostáticos semanais.","C":"Registrar as ocorrências rotineiras no Registro de Segurança (Livro de Ordem).","D":"Calibrar os manômetros de forma direta."},"correct":"C"},{"id":"13","text":"Conforme o item 13.4.1.7 da NR-13, qual a ação imediata exigida do operador ao detectar condições de risco?","options":{"A":"Aguardar o término do turno para relatar o problema.","B":"Interromper a operação e comunicar o fato.","C":"Ajustar a caldeira para o modo automático e afastar-se.","D":"Realizar uma descarga de fundo contínua."},"correct":"B"},{"id":"14","text":"Quais são os dois parâmetros controlados pela descarga de fundo além da remoção de lama?","options":{"A":"Temperatura da chaminé e viscosidade do óleo combustível.","B":"Limites de sólidos totais dissolvidos, alcalinidade e sílica.","C":"Pressão máxima admissível e vazão de ar do piloto.","D":"Nível do reservatório de óleo e tensão do painel."},"correct":"B"},{"id":"15","text":"Qual a recomendação mínima de frequência para a execução da descarga de fundo conforme o texto técnico?","options":{"A":"Uma descarga a cada hora de funcionamento.","B":"No mínimo uma descarga por semana.","C":"No mínimo uma descarga por dia, com quantidade ideal determinada pelo tratamento da água.","D":"Duas descargas por turno de forma contínua."},"correct":"C"},{"id":"16","text":"Em que momento operacional deve ser evitada a execução da descarga de fundo para prevenir flutuações na pressão do vapor?","options":{"A":"Quando a caldeira estiver operando em baixa pressão.","B":"Quando a caldeira estiver em carga máxima.","C":"Durante o primeiro acendimento diário em fogo mínimo.","D":"Após a parada final de funcionamento do ativo."},"correct":"B"},{"id":"17","text":"Qual a pressão recomendada para a realização da descarga de fundo em caldeiras onde a operação contínua não impede o ajuste?","options":{"A":"Próxima de 100 kPa (1,01 kgf/cm² ou 14,5 psig).","B":"Próxima de 207 kPa (2,1 kgf/cm² ou 30 psig).","C":"Próxima de 345 kPa (3,5 kgf/cm² ou 50 psig).","D":"Próxima de 500 kPa (5,1 kgf/cm² ou 72,5 psig)."},"correct":"C"},{"id":"18","text":"Que dispositivo especial é recomendado para caldeiras de operação contínua onde não é possível executar a descarga em baixa pressão?","options":{"A":"Válvulas intermediárias de retenção de fluxo.","B":"Instalação de válvulas do tipo descarga rápida após as válvulas normais de bloqueio.","C":"Sensores de chama infravermelhos adicionais.","D":"Pressostatos de pressão máxima redundantes."},"correct":"B"},{"id":"19","text":"Qual a função do tanque de descarga no sistema de purga da caldeira?","options":{"A":"Armazenar água limpa para alimentação imediata da bomba.","B":"Receber o impacto da pressão, conduzir o vapor formado e reduzir a temperatura da água antes do descarte no esgoto.","C":"Dosar produtos químicos de forma automática na água fria.","D":"Filtrar o óleo combustível antes do queimador."},"correct":"B"},{"id":"20","text":"No modo de operação automática, qual componente promove a ordenação lógica e segura das operações de partida e parada da combustão e supervisiona a chama?","options":{"A":"Sistema de modulação contínua.","B":"Pressostato de pressão máxima.","C":"Programador de combustão.","D":"Regulador da bomba de alimentação."},"correct":"C"},{"id":"21","text":"O que faz o sistema de modulação em uma caldeira automática?","options":{"A":"Controla a abertura das válvulas de segurança por alavanca.","B":"Faz com que a produção de vapor acompanhe a demanda, mantendo a pressão em torno de um valor ajustado.","C":"Desliga a caldeira em caso de falta de água de forma seca.","D":"Limpa os filtros de óleo e água de forma hidrodinâmica."},"correct":"B"},{"id":"22","text":"Qual a função do pressostato de pressão máxima no painel de comando?","options":{"A":"Regular a vazão da bomba de alimentação de água.","B":"Desligar a caldeira, cessando a combustão, se o vapor atingir o valor máximo ajustado.","C":"Controlar a temperatura do óleo combustível no tanque.","D":"Registrar as ocorrências rotineiras no diário de bordo."},"correct":"B"},{"id":"23","text":"Qual a recomendação do texto técnico em caso de falha de ignição durante a partida da caldeira?","options":{"A":"Insistir na ignição até que a chama principal se estabilize.","B":"Aumentar a vazão de gás do piloto imediatamente.","C":"Não insistir na ignição sem antes verificar a causa e realizar uma perfeita ventilação interna (pós-purga).","D":"Fechar a válvula de saída de vapor e abrir o suspiro."},"correct":"C"},{"id":"24","text":"Para evitar choque térmico ao ligar a bomba de alimentação de água em uma caldeira fria, que cuidado pode ser tomado se houver inversor de frequência?","options":{"A":"Ligar a bomba em velocidade máxima para pressurização rápida.","B":"Ligar a bomba em velocidade reduzida.","C":"Manter a bomba desligada até que a caldeira atinja 345 kPa.","D":"Descarregar o balão completamente antes do acionamento."},"correct":"B"},{"id":"25","text":"Que verificação deve ser feita no visor de nível pelo menos uma vez por dia?","options":{"A":"Verificar o funcionamento da coluna de nível.","B":"Limpar a face externa com limpador de vidros.","C":"Alterar as marcas de controle operacional.","D":"Isolar a linha de água com a caldeira em carga máxima."},"correct":"A"},{"id":"26","text":"Qual a frequência recomendada para verificar o funcionamento das válvulas de segurança acionando as alavancas?","options":{"A":"Pelo menos uma vez por dia.","B":"Pelo menos uma vez por semana.","C":"Apenas durante as paradas prolongadas de manutenção.","D":"A cada troca de turno do operador técnico."},"correct":"B"},{"id":"27","text":"O que é expressamente proibido fazer em relação ao manuseio das válvulas de segurança?","options":{"A":"Acioná-las na pressão máxima de trabalho.","B":"Suspender as válvulas pela alavanca de teste.","C":"Realizar inspeções sistemáticas na vedação.","D":"Manter marcas de controle no indicador de nível."},"correct":"B"},{"id":"28","text":"Qual das seguintes alternativas representa uma prática proibida no arranjo das válvulas de segurança?","options":{"A":"Instalar coletores de alívio direcionados para áreas sem pessoal.","B":"Colocar válvulas intermediárias de qualquer tipo entre as válvulas de segurança e a conexão da caldeira.","C":"Testar a vedação instantânea após o alívio de pressão.","D":"Acionar a alavanca com a caldeira na pressão de trabalho."},"correct":"B"},{"id":"29","text":"Por que é proibido usar a válvula de segurança para descarga normal de vapor?","options":{"A":"Porque causa o desligamento automático do programador de combustão.","B":"Porque compromete a função aliviadora automática e desgasta a sede sem necessidade técnica.","C":"Porque inverte o fluxo do óleo combustível no queimador.","D":"Porque impede o funcionamento do inversor da bomba."},"correct":"B"},{"id":"30","text":"Qual a primeira ação na rotina de parada final de funcionamento da caldeira ao término do expediente?","options":{"A":"Desligar a chave geral do quadro de comando.","B":"Fechar as válvulas de combustível e água.","C":"Execute uma descarga da coluna de nível, abrindo totalmente a respectiva válvula de descarga.","D":"Aguardar o término completo da pós-purga do sistema."},"correct":"C"},{"id":"31","text":"Na rotina de parada final, o que deve ser feito após fechar lentamente a válvula de saída de vapor?","options":{"A":"Desligar o painel de comando imediatamente.","B":"Aguardar a pressão atingir o valor máximo ajustado para que o pressostato atue, cessando a combustão.","C":"Abrir as válvulas de suspiro do balão de água.","D":"Realizar uma descarga de fundo contínua em carga máxima."},"correct":"B"},{"id":"32","text":"Quais válvulas devem ser fechadas após desligar a caldeira no fim do expediente?","options":{"A":"Válvulas do visor de nível e da rede de óleo.","B":"Válvulas de gás (ou óleo) e a válvula de entrada de água.","C":"Válvulas de segurança e de descarga rápida.","D":"Válvulas de suspiro do balão e do coletor."},"correct":"B"},{"id":"33","text":"Qual verificação de segurança adicional pode ser feita uma vez por semana aproveitando a operação de parada final?","options":{"A":"Testar as válvulas de segurança com a caldeira ainda na pressão máxima.","B":"Calibrar todos os manômetros com padrão RBC.","C":"Desativar os intertravamentos do painel de comando.","D":"Drenar 100% da água do balão da caldeira."},"correct":"A"},{"id":"34","text":"Qual a definição técnica de válvula de segurança fornecida na apostila?","options":{"A":"Dispositivo manual de alívio operado por pressostato elétrico.","B":"Dispositivo aliviador de pressão automático atuado pela pressão estática e de rápida ação.","C":"Válvula agulha de regulagem fina para controle de sólidos.","D":"Registro de bloqueio mecânico para isolamento de linhas."},"correct":"B"},{"id":"35","text":"Qual a condição exigida para o fechamento da válvula de segurança após o alívio?","options":{"A":"Fechar de forma gradual acompanhando a modulação.","B":"Fechar instantaneamente e com perfeita vedação, logo após a queda de pressão.","C":"Permanecer aberta até o resfriamento completo da água.","D":"Fechar apenas após o acionamento manual da alavanca."},"correct":"B"},{"id":"36","text":"O que o operador deve fazer em relação aos reservatórios de água e combustível antes de iniciar a partida?","options":{"A":"Esvaziá-los para limpeza de filtros.","B":"Verificar se estão suficientemente abastecidos.","C":"Isolar as linhas de retorno com bloqueios manuais.","D":"Adicionar produtos químicos purificadores diretamente."},"correct":"B"},{"id":"37","text":"Durante o funcionamento normal automático, qual a responsabilidade do operador descrita na nota técnica?","options":{"A":"Nenhuma, pois o sistema opera sem intervenção em nenhum momento.","B":"Proceder à rotina de manutenção, limpeza, coleta de dados, pequenos reparos e ajustes.","C":"Alterar os parâmetros do programador de combustão.","D":"Operar manualmente as válvulas de modulação de chama."},"correct":"B"},{"id":"38","text":"Qual o objetivo de manter a Casa de Caldeira limpa e arrumada?","options":{"A":"Atender apenas a critérios estéticos de fiscalização.","B":"Prevenir defeitos e acidentes eliminando materiais inflamáveis em excesso e detritos.","C":"Facilitar o resfriamento natural do balão de água.","D":"Permitir o livre acesso de pessoas não autorizadas."},"correct":"B"},{"id":"39","text":"O que o operador deve observar nos visores da fornalha durante o funcionamento?","options":{"A":"O nível de óleo combustível acumulado no fundo.","B":"O aspecto da chama na fornalha e a existência de fumaça na chaminé.","C":"A rotação mecânica do ventilador de ar primário.","D":"A formação de incrustações de sílica nos refratários."},"correct":"B"},{"id":"40","text":"Que tarefa de manutenção básica o operador deve realizar nas redes de água e combustível durante a operação?","options":{"A":"Substituir as tubulações principais de condução.","B":"Examinar e limpar os diversos filtros.","C":"Alterar a calibração de fábrica dos manômetros.","D":"Isolar os purgadores de vapor permanentemente."},"correct":"B"},{"id":"41","text":"Qual a consequência de uma descarga de fundo deficiente que permita o acúmulo de lodo?","options":{"A":"Aumento imediato da eficiência térmica do sistema.","B":"Risco de deformação e até mesmo explosões na fornalha por superaquecimento.","C":"Abertura automática das válvulas de segurança por alta pressão.","D":"Redução da concentração de sólidos totais dissolvidos."},"correct":"B"},{"id":"42","text":"O que expressa o termo \"\"ciclos de concentração\"\" no tratamento de água?","options":{"A":"O número de vezes que os sólidos da água de alimentação estão concentrados na água da caldeira.","B":"O tempo que a caldeira leva para atingir a pressão de trabalho.","C":"A frequência semanal de testes da válvula de segurança.","D":"O número de paradas de emergência registradas no diário."},"correct":"A"},{"id":"43","text":"Como devem ser regulados os ciclos de concentração da água da caldeira?","options":{"A":"Alterando a temperatura do óleo combustível no queimador.","B":"Pela quantidade de purgas ou descargas de fundo executadas.","C":"Ajustando o pressostato de pressão máxima no painel.","D":"Aumentando a velocidade da bomba de alimentação."},"correct":"B"},{"id":"44","text":"Que procedimento prático ajuda no controle do intervalo e quantidade de água drenada na descarga?","options":{"A":"Utilizar cronômetros digitais interligados ao sensor de chama.","B":"Efetuar marcas no indicador de nível para melhor controle.","C":"Abrir parcialmente a válvula de saída de vapor principal.","D":"Monitorar exclusivamente a temperatura dos gases da chaminé."},"correct":"B"},{"id":"45","text":"Qual o cuidado com a segurança de terceiros antes de executar a descarga de fundo?","options":{"A":"Desligar a chave geral do quadro de comando da caldeira.","B":"Certificar-se de que não há pessoas por perto e de que não há anormalidade na saída.","C":"Fechar as válvulas do visor de nível para evitar quebra.","D":"Acionar o alarme de incêndio da unidade industrial."},"correct":"B"},{"id":"46","text":"Por que a água da descarga de fundo não pode ser lançada diretamente na rede de esgoto normal?","options":{"A":"Devido à alta pressão e temperatura em que se encontra no interior da caldeira.","B":"Porque contém óleo combustível em suspensão contínua.","C":"Devido ao risco de contaminar o ar com gases de combustão.","D":"Porque descalibra os sistemas automáticos do esgoto público."},"correct":"A"},{"id":"47","text":"Como é realizada a operação de descarga de fundo de forma preferencial para garantir o controle visual estável?","options":{"A":"Por um único operador executando todas as tarefas de forma rápida.","B":"Realizada com duas pessoas, uma observando o nível e outra operando a descarga.","C":"De forma 100% remota sem supervisão local na área de descarte.","D":"Através do acionamento mecânico da alavanca da PSV."},"correct":"B"},{"id":"48","text":"Qual das seguintes válvulas deve estar aberta na rotina de partida da caldeira?","options":{"A":"Válvula de saída de vapor principal.","B":"Válvula de descarga da caldeira (costado).","C":"Válvula do visor de nível de água.","D":"Válvula de dreno do indicador de nível."},"correct":"C"},{"id":"49","text":"Qual a recomendação para a abertura das válvulas de suspiro do balão na partida de uma caldeira a gás?","options":{"A":"Mantê-las fechadas para acelerar a pressurização inicial.","B":"Abri-las para permitir a liberação de ar e fechar quando o vapor começar a sair.","C":"Mantê-las abertas durante todo o turno de trabalho automático.","D":"Conectá-las diretamente à rede de óleo combustível principal."},"correct":"B"},{"id":"50","text":"O que deve ser verificado periodicamente através das aberturas de inspeção da caldeira?","options":{"A":"A calibração eletrônica do programador de combustão.","B":"A existência de lama na região próxima à fornalha.","C":"O alinhamento mecânico do eixo da bomba de água.","D":"A vedação das resistências do aquecedor de óleo."},"correct":"B"},{"id":"51","text":"Qual a primeira providência ao detectar ruídos estranhos, vibrações ou aquecimento anormal de mancais?","options":{"A":"Aumentar a modulação de chama para queimar os resíduos.","B":"Ignorar caso a caldeira esteja operando no modo automático.","C":"Procurar identificar a causa e tomar as medidas cabíveis de reparo ou comunicação.","D":"Fechar imediatamente a válvula geral de entrada d'água."},"correct":"C"},{"id":"52","text":"Onde devem ser registradas as paradas de emergência, reparos, reformas e acidentes?","options":{"A":"No manual de operação fornecido pelo fabricante.","B":"No \"\"Diário da Caldeira\"\" (Registro ou Livro de Segurança).","C":"Em relatórios arquivados exclusivamente no planejamento.","D":"No painel frontal do quadro de comando automático."},"correct":"B"},{"id":"53","text":"O que constitui o sistema de controle de nível de água em modo automático?","options":{"A":"Abertura mecânica de purgadores de alta pressão.","B":"Operação automática da bomba d'água mantendo o nível na faixa e controlando o nível mínimo seguro.","C":"Purga contínua de superfície por meio de válvula agulha.","D":"Interrupção imediata do suprimento de gás do piloto."},"correct":"B"},{"id":"54","text":"O que faz o sistema de intertravamentos de segurança no painel de comando?","options":{"A":"Altera a pressão de ajuste das válvulas de segurança externas.","B":"Prove os meios à operação segura com a supervisão contínua das falhas.","C":"Modula a chama entre o fogo mínimo e o fogo máximo.","D":"Filtra as impurezas do óleo combustível de retorno."},"correct":"B"},{"id":"55","text":"Qual o comportamento esperado da válvula de segurança para pressões inferiores à sua regulagem?","options":{"A":"Apresentar pequenos vazamentos contínuos de alívio.","B":"Permanecer perfeitamente vedada sem dar margem a perdas.","C":"Abrir parcialmente para calibrar a pressão estática.","D":"Permitir o retorno do vapor para o balão da caldeira."},"correct":"B"},{"id":"56","text":"O que o operador deve fazer se um defeito na caldeira não puder ser reparado por ele?","options":{"A":"Insistir na operação modificando os pressostatos.","B":"Comunicar o fato imediatamente ao setor responsável para as devidas medidas.","C":"Isolar as válvulas de segurança e manter o fogo mínimo.","D":"Deixar a área de controle e aguardar o fim do turno."},"correct":"B"},{"id":"57","text":"Na partida automática, a intervenção direta do operador é necessária em qual situação rotineira após paradas normais?","options":{"A":"Em nenhum momento, pois a partida se dá automaticamente de forma comandada.","B":"Apenas para abrir a válvula de descarga de fundo rápida.","C":"Para regular manualmente os eletrodos de ignição do piloto.","D":"Para rearmar o pressostato de pressão máxima a cada ciclo."},"correct":"A"},{"id":"58","text":"Qual o perigo de acionar a alavanca da válvula de segurança com a pressão da caldeira muito baixa?","options":{"A":"Provocar o travamento mecânico do programador de combustão.","B":"Danificar a sede ou comprometer a perfeita vedação por falta de pressão para assento.","C":"Causar um golpe de aríete na linha de alimentação de água.","D":"Elevar instantaneamente a temperatura dos gases da chaminé."},"correct":"B"},{"id":"59","text":"O que deve ser feito com a água acumulada no aquecedor de óleo combustível?","options":{"A":"Mantida no sistema para ajudar na atomização da chama.","B":"Eliminada através do dreno do aquecedor de óleo.","C":"Bombeada de volta para o reservatório principal de água.","D":"Misturada ao gás combustível do piloto de ignição."},"correct":"B"},{"id":"60","text":"Qual a função das resistências no aquecedor de óleo combustível?","options":{"A":"Pressurizar a rede de óleo até o queimador principal.","B":"Manter a temperatura do óleo na faixa adequada para otimizar a combustão.","C":"Eliminar os sólidos totais dissolvidos por evaporação.","D":"Substituir o piloto de gás no momento da ignição inicial."},"correct":"B"},{"id":"61","text":"De quem depende em grande parte a vida útil, o bom funcionamento e a segurança da caldeira?","options":{"A":"Exclusivamente do engenheiro que assina a ART de inspeção.","B":"Em grande parte do operador de caldeira e de sua atenção aos parâmetros.","C":"Do fabricante do programador de combustão eletrônico.","D":"Da equipe de manutenção predial da unidade industrial."},"correct":"B"},{"id":"62","text":"O que o operador não deve fazer em relação à área de controle quando a caldeira estiver em funcionamento?","options":{"A":"Realizar coletas de dados e pequenas rotinas de limpeza.","B":"Se afastar da área de controle da caldeira sob sua responsabilidade.","C":"Monitorar os manômetros de atomização e vapor.","D":"Atualizar as anotações obrigatórias do diário de bordo."},"correct":"B"},{"id":"63","text":"Qual o limite de pressão que o operador deve respeitar rigidamente para garantir a segurança do ativo?","options":{"A":"A pressão de calibração do pressostato de baixa.","B":"A pressão máxima de trabalho admissível (PMTA).","C":"A pressão de evaporação da água fria a zero grau.","D":"A pressão nominal de projeto da bomba de alimentação."},"correct":"B"},{"id":"64","text":"Quais instrumentos devem ser observados com frequência pelo operador para detectar anormalidades?","options":{"A":"Apenas os termômetros de saída de óleo combustível.","B":"Os manômetros, termômetros, coluna de nível e demais instrumentações.","C":"Os indicadores de vazão do esgoto da planta industrial.","D":"Os sensores de presença mecânica da casa de caldeiras."},"correct":"B"},{"id":"65","text":"O que o operador deve evitar em relação à pressão ou carga da caldeira para proteger as juntas e tubulações?","options":{"A":"Manter a pressão estável em torno do valor ajustado.","B":"Evitar variação brusca de pressão ou de carga na caldeira.","C":"Operar em modo automático utilizando modulação fina.","D":"Realizar as descargas de fundo na pressão recomendada."},"correct":"B"},{"id":"66","text":"Como devem ser executadas as descargas de fundo em relação aos diferentes pontos de purga do ativo?","options":{"A":"Concentradas em um único ponto ignorando os demais coletores.","B":"Executadas alternadamente em cada um dos pontos de descarga.","C":"De forma simultânea abrindo todas as válvulas ao mesmo tempo.","D":"Apenas no ponto mais próximo da bomba de alimentação d'água."},"correct":"B"},{"id":"67","text":"O que o operador deve certificar-se após terminar a operação de drenagem da descarga de fundo?","options":{"A":"De que a pressão do vapor subiu para o fogo máximo.","B":"De que não exista vazamento nas válvulas de descarga.","C":"De que o reservatório de óleo combustível foi esvaziado.","D":"De que as resistências do aquecedor foram desligadas."},"correct":"B"},{"id":"68","text":"Que tipo de dispositivo especial pode ser fornecido para controle contínuo e econômico de sólidos dissolvidos na superfície?","options":{"A":"Válvula de descarga rápida automática por tempo.","B":"Descarga contínua ou de superfície via válvula agulha ou dessalinizadora.","C":"Pressostato redundante de segurança mecânica.","D":"Sensor de chama com varredura infravermelha contínua."},"correct":"B"},{"id":"69","text":"O que permite a válvula de descarga rápida automática quando instalada no sistema?","options":{"A":"Regular manualmente a temperatura de atomização do óleo.","B":"Regular o tempo entre uma purga e outra, bem como a duração da purga.","C":"Eliminar a necessidade de operador qualificado na unidade.","D":"Isolar as válvulas de segurança durante testes hidrostáticos."},"correct":"B"},{"id":"70","text":"Qual a ação correta se forem encontrados vazamentos nas válvulas de descarga após a operação de purga?","options":{"A":"Ignorar o fato até a próxima inspeção anual da NR-13.","B":"Providenciar os reparos devidos para sanar a desconformidade.","C":"Deixar a válvula parcialmente aberta para aliviar a linha.","D":"Desativar o sistema de modulação automática de chama."},"correct":"B"},{"id":"71","text":"O que o operador deve fazer logo após o término da pós-purga na rotina de parada final?","options":{"A":"Ligar a bomba de alimentação em velocidade máxima.","B":"Desligar a caldeira para interromper o ciclo operacional.","C":"Abrir a válvula de saída de vapor muito rapidamente.","D":"Acionar a alavanca da válvula de segurança a frio."},"correct":"B"},{"id":"72","text":"Na rotina de parada de uma caldeira a óleo com piloto a gás, que ação adicional de bloqueio é exigida?","options":{"A":"Fechar as válvulas do visor de nível de água.","B":"Fechar a válvula de bloqueio do suprimento de gás do piloto.","C":"Isolar o tanque de descarga de esgoto industrial.","D":"Desativar o programador de combustão automática."},"correct":"B"},{"id":"73","text":"Qual o último passo recomendado na rotina de parada final para garantir a segurança absoluta do sistema elétrico?","options":{"A":"Alterar a calibração dos pressostatos de trabalho.","B":"Desligar também a chave geral da caldeira.","C":"Manter o quadro de comando ligado em modo de espera.","D":"Desconectar os cabos dos sensores de chama da fornalha."},"correct":"B"},{"id":"74","text":"O que caracteriza a ação de abertura da válvula de segurança de uma caldeira?","options":{"A":"Uma abertura lenta e gradual dependente da modulação.","B":"Abertura integral e rápida ação ao atingir a pressão definida.","C":"Atuação manual exclusiva por meio de cabo à distância.","D":"Intervenção eletrônica comandada pelo painel digital."},"correct":"B"},{"id":"75","text":"O que a válvula de segurança deve fazer enquanto persistir a condição de sobrepressão no gerador?","options":{"A":"Fechar parcialmente para reduzir o ruído na área.","B":"Permanecer aberta enquanto não houver a queda de pressão.","C":"Modular o fluxo de vapor em conjunto com o fogo mínimo.","D":"Descarregar a água acumulada no fundo do costado."},"correct":"B"},{"id":"76","text":"Qual a consequência direta de operar a caldeira sem a limpeza e arrumação adequada da Casa de Caldeira?","options":{"A":"Melhora no rendimento térmico do queimador principal.","B":"Aumento do risco de acidentes e interrupção da geração de vapor.","C":"Calibração automática dos instrumentos de medição de pressão.","D":"Redução da formação de lama na região da fornalha."},"correct":"B"},{"id":"77","text":"Que tipo de combustível pode ser utilizado no piloto de ignição de acordo com o modelo do equipamento?","options":{"A":"Óleo combustível pesado ou resíduos industriais inflamáveis.","B":"Gás em cilindro, óleo Diesel ou querosene.","C":"Álcool hidratado ou solventes clorados de processo.","D":"Carvão pulverizado ou lenha de reflorestamento."},"correct":"B"},{"id":"78","text":"Na partida de uma caldeira a gás, o que deve ser verificado em relação ao sistema de captação e lançamento de gases?","options":{"A":"Se as válvulas de descarga de fundo estão semiabertas.","B":"Se o sistema está totalmente desobstruído e bem ventilado.","C":"Se há acúmulo de lodo na base da chaminé externa.","D":"Se a temperatura do gás superou os 60 graus Celsius."},"correct":"B"},{"id":"79","text":"Qual o procedimento correto do operador durante o primeiro acendimento diário comandado pelo programador automático?","options":{"A":"Ausentar-se da área de controle para preencher relatórios técnicos.","B":"Observar atentamente toda a operação para certificar-se da normalidade do sistema.","C":"Alterar manualmente as válvulas de bloqueio de óleo e gás.","D":"Desativar os intertravamentos de segurança do painel frontal."},"correct":"B"},{"id":"80","text":"O que deve ser feito com a válvula de bloqueio de gás ou óleo para o piloto na rotina de partida?","options":{"A":"Deve-se assegurar de que está totalmente fechada.","B":"Deve-se assegurar de que está aberta para permitir a ignição.","C":"Deve ser mantida em regulagem parcial de fogo mínimo.","D":"Deve ser conectada à linha de descarga de fundo do balão."},"correct":"B"},{"id":"81","text":"Na rotina de partida, qual o estado obrigatório da válvula de descarga da caldeira?","options":{"A":"Totalmente aberta para eliminar o ar do balão.","B":"Assegurar-se de que está devidamente fechada.","C":"Mantida em posição intermediária de fluxo contínuo.","D":"Interligada ao suspiro do coletor de saída de vapor."},"correct":"B"},{"id":"82","text":"O que o operador deve monitorar em relação aos manômetros auxiliares da caldeira?","options":{"A":"Apenas a pressão da linha de água sanitária da planta.","B":"As pressões de vapor, atomização, ar, óleo e/ou gás.","C":"A perda de carga nos filtros de esgoto industrial.","D":"A pressão interna do tanque de condensado frio."},"correct":"B"},{"id":"83","text":"Qual a função do sensor de chama nos sistemas de segurança de caldeiras a gás?","options":{"A":"Modular a velocidade da bomba de alimentação de água.","B":"Detectar a presença ou ausência de chama para controle de intertravamento de segurança.","C":"Medir a temperatura dos gases de exaustão na chaminé.","D":"Controlar a concentração de sólidos totais dissolvidos."},"correct":"B"},{"id":"84","text":"O que deve ser verificado na rede de óleo antes de ligar a bomba de circulação no aquecimento de óleo combustível?","options":{"A":"Se a válvula de saída de vapor principal está aberta em carga máxima.","B":"Se o tanque (reservatório) de óleo está devidamente abastecido.","C":"Se as válvulas de segurança foram travadas com dispositivos mecânicos.","D":"Se o nível de água atingiu o limite mínimo de interrupção."},"correct":"B"},{"id":"85","text":"Que ação o operador toma para ligar o aquecimento do tanque de óleo combustível pesado?","options":{"A":"Liga as resistências elétricas do programador de combustão.","B":"Abra a válvula de entrada do vapor para a serpentina de aquecimento do tanque.","C":"Fecha a válvula de retorno de óleo do queimador principal.","D":"Aciona o combustor piloto a uma distância segura da fornalha."},"correct":"B"},{"id":"86","text":"Como o queimador deve operar após ser acionado com o óleo combustível condicionado?","options":{"A":"De forma forçada apresentando vibrações e barulhos excessivos.","B":"De forma normal, sem ser \"\"forçado\"\" ou apresentar vibrações excessivas.","C":"Em fogo máximo permanente ignorando a demanda do sistema.","D":"Com a válvula de saída de vapor totalmente fechada por longo período."},"correct":"B"},{"id":"87","text":"Qual a ação correta caso o queimador apresente comportamento forçado com vibrações e barulhos excessivos?","options":{"A":"Manter o funcionamento para retificar os refratários da fornalha.","B":"Desligar imediatamente para análise e correção do problema.","C":"Aumentar a pressão de atomização do ar de forma manual.","D":"Abrir totalmente as válvulas de purga da coluna de nível."},"correct":"B"},{"id":"88","text":"Qual o estado da válvula de dreno do indicador de nível na rotina de partida?","options":{"A":"Aberta para circulação contínua de água limpa.","B":"Assegurar-se de que está devidamente fechada.","C":"Semiaberta para controle de sólidos totais dissolvidos.","D":"Conectada à serpentina de aquecimento do tanque de óleo."},"correct":"B"},{"id":"89","text":"O que o sistema de ignição automática realiza antes de acender a chama piloto em caldeiras a gás?","options":{"A":"Realiza testes de combustão e vazão de ar (purga da fornalha).","B":"Executa uma descarga de fundo de curta duração no costado.","C":"Desliga as resistências elétricas do aquecedor de óleo combustível.","D":"Abre a válvula principal de saída de vapor industrial."},"correct":"A"},{"id":"90","text":"Qual o cuidado essencial ao acender sistemas de ignição manuais de caldeiras?","options":{"A":"Fechar as válvulas do visor de nível de água de forma estanque.","B":"Acender sempre primeiro o piloto a uma distância segura.","C":"Manter a modulação em fogo máximo durante a ignição inicial.","D":"Isolar a linha de alimentação da bomba de água principal."},"correct":"B"},{"id":"91","text":"O que indica a saída de vapor pelas válvulas de suspiro abertas na pressurização inicial?","options":{"A":"Que a caldeira atingiu a pressão máxima de trabalho admissível.","B":"Que todo o ar foi expelido do interior do sistema.","C":"Que as válvulas de segurança estão descalibradas na base.","D":"Que há acúmulo excessivo de lama na região da fornalha."},"correct":"B"},{"id":"92","text":"Quando devem ser fechadas as válvulas de suspiro na rotina de partida de uma caldeira a gás?","options":{"A":"Imediatamente após ligar a chave geral do quadro de comando.","B":"Assim que o vapor começar a sair, indicando a expulsão total do ar.","C":"Quando a caldeira atingir a pressão máxima ajustada no pressostato.","D":"Somente após a abertura total da válvula de saída de vapor."},"correct":"B"},{"id":"93","text":"Se houver mais de uma caldeira em operação, quando pode ser aberta a descarga da nova caldeira no sistema?","options":{"A":"Em qualquer momento da partida independente da pressão interna.","B":"Somente após a nova caldeira atingir a mesma pressão do sistema em funcionamento.","C":"Quando o nível de água da caldeira fria estiver no limite mínimo.","D":"Após desligar a chave geral de comando do ativo em operação."},"correct":"B"},{"id":"94","text":"O que o programador de combustão faz caso ocorra alguma falha ou a pressão atinja o máximo ajustado no modo automático?","options":{"A":"Altera a velocidade da bomba de água para vazão reduzida.","B":"Executa a rotina de parada da caldeira de forma lógica e segura.","C":"Abre automaticamente as válvulas de purga da coluna de nível.","D":"Aciona o aquecedor de óleo combustível em temperatura máxima."},"correct":"B"},{"id":"95","text":"Qual a consequência de acionar a alavanca da válvula de segurança uma vez por semana na pressão de trabalho?","options":{"A":"Descalibrar os pressostatos de controle de modulação de chama.","B":"Garantir que as válvulas não fiquem presas por falta de uso.","C":"Provocar o superaquecimento das chapas metálicas da fornalha.","D":"Aumentar os ciclos de concentração de sólidos totais dissolvidos."},"correct":"B"},{"id":"96","text":"Qual a restrição quanto à instalação de travas nas válvulas de segurança em testes hidrostáticos?","options":{"A":"Devem ser usadas apenas se a caldeira estiver operando em fogo mínimo.","B":"Nunca testar a caldeira hidrostaticamente com as válvulas instaladas e usando travas.","C":"São obrigatórias em todos os ensaios de pressão da NR-13.","D":"Devem ser instaladas após a válvula de bloqueio rápido manual."},"correct":"B"},{"id":"97","text":"Quem determina a quantidade ideal de descargas de fundo a serem executadas além do limite mínimo de uma por dia?","options":{"A":"O fabricante do pressostato de pressão máxima do comando.","B":"O responsável pelo tratamento da água executado na caldeira.","C":"A fiscalização do Ministério do Trabalho durante auditorias.","D":"O programador automático de combustão eletrônica do ativo."},"correct":"B"},{"id":"98","text":"Qual o estado da válvula de descarga da coluna de nível na rotina de partida da caldeira?","options":{"A":"Deve-se assegurar de que está devidamente fechada.","B":"Deve ser mantida totalmente aberta para circulação contínua.","C":"Ajustada em modo de purga de superfície via válvula agulha.","D":"Interligada diretamente à rede de gás combustível do piloto."},"correct":"A"},{"id":"99","text":"O que deve ser verificado na lubrificação dos equipamentos antes de iniciar a operação da caldeira?","options":{"A":"Se o óleo lubrificante foi misturado ao combustível principal.","B":"Verificar se a lubrificação dos equipamentos está adequada e em conformidade.","C":"Isolar os mancais para evitar o contato com graxas minerais.","D":"Alterar a calibração dos termômetros de saída da chaminé."},"correct":"B"},{"id":"100","text":"Qual o documento obrigatório onde o operador deve registrar as ocorrências rotineiras da caldeira?","options":{"A":"No manual de manutenção preventiva da unidade industrial.","B":"No Registro de Segurança (Livro de Ordem ou Diário da Caldeira).","C":"Em planilhas eletrônicas de controle de indicadores quantitativos.","D":"No prontuário original do vaso de pressão fornecido pelo cliente."},"correct":"B"}];
+
+let currentUser = null;
+let quiz = null;
+let selected = null;
+let adminUsers = [];
+
+const appEl = document.getElementById("app");
+
+function esc(v=""){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+function normalizeCPF(v=""){return String(v).replace(/\D/g,"");}
+function userEmail(cpf){return `${normalizeCPF(cpf)}@usuarios.hnr.local`;}
+function isAdmin(){return currentUser?.email === ADMIN_EMAIL;}
+function fmtDate(ts){if(!ts)return "—";try{const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleString("pt-BR")}catch{return "—"}}
+function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function shuffleOptions(q){
+  const entries=Object.entries(q.options).map(([key,text])=>({key,text}));
+  const arr=shuffle(entries);
+  const options={}; const correctKey=q.correct;
+  let newCorrect="";
+  "ABCD".split("").forEach((letter,i)=>{options[letter]=arr[i].text;if(arr[i].key===correctKey)newCorrect=letter});
+  return {...q,options,correct:newCorrect};
+}
+function makeQuiz(){
+  const ordered=shuffle(QUESTIONS).map(shuffleOptions);
+  return {questions:ordered,index:0,answers:{},startedAt:Date.now()};
+}
+
+function shell(title,subtitle="",body=""){
+  appEl.innerHTML=`
+  <header class="top"><div><div class="brand">${esc(title)}</div>${subtitle?`<div class="small" style="color:#94a3b8">${esc(subtitle)}</div>`:""}</div>
+  ${currentUser?`<button class="btn secondary" id="logoutBtn">Sair</button>`:""}</header>
+  <main class="wrap">${body}</main>`;
+  document.getElementById("logoutBtn")?.addEventListener("click",async()=>{await signOut(auth)});
+}
+
+function renderLogin(error=""){
+  currentUser=null;
+  appEl.innerHTML=`
+  <div class="wrap"><div class="card login">
+    <div class="head"><div style="font-size:40px">🛡️</div><h1 style="margin:8px 0 4px;font-size:22px">Avaliação Técnica HNR</h1><div style="color:#60a5fa;font-size:13px;font-weight:800">OPERADOR DE CALDEIRAS</div></div>
+    <div class="body">
+      ${error?`<div class="alert err">${esc(error)}</div>`:""}
+      <form id="loginForm">
+        <div class="field"><label>CPF</label><input id="cpf" inputmode="numeric" maxlength="14" placeholder="Digite o CPF" required></div>
+        <div class="field"><label>Senha</label><input id="password" type="password" placeholder="Digite a senha" required></div>
+        <button class="btn primary" style="width:100%">Entrar</button>
+      </form>
+      <p class="small muted" style="text-align:center;margin-top:18px">Acesso individual. Cada usuário padrão visualiza somente a própria avaliação.</p>
+    </div>
+  </div></div>`;
+  document.getElementById("loginForm").onsubmit=async(e)=>{
+    e.preventDefault();
+    const cpf=normalizeCPF(document.getElementById("cpf").value);
+    const password=document.getElementById("password").value;
+    if(!cpf){renderLogin("Informe um CPF válido.");return}
+    try{
+      await signInWithEmailAndPassword(auth, cpf===ADMIN_CPF?ADMIN_EMAIL:userEmail(cpf), password);
+    }catch(err){renderLogin("CPF ou senha incorretos.");}
+  };
+}
+
+async function loadProfile(uid){
+  const snap=await getDoc(doc(db,"users",uid));
+  return snap.exists()?snap.data():null;
+}
+
+async function renderUser(){
+  const profile=await loadProfile(currentUser.uid);
+  if(!profile){await signOut(auth);renderLogin("Usuário sem cadastro no sistema.");return}
+  const resultSnap=await getDoc(doc(db,"evaluations",currentUser.uid));
+  const result=resultSnap.exists()?resultSnap.data():null;
+  if(result){renderUserResult(profile,result);return}
+  renderUserStart(profile);
+}
+
+function renderUserStart(profile){
+  shell("Avaliação Técnica HNR",profile.name||profile.cpf,`
+    <div class="card" style="max-width:850px;margin:20px auto;padding:28px">
+      <div class="alert info"><b>Olá, ${esc(profile.name||"usuário")}.</b><br>Você está prestes a iniciar sua avaliação individual.</div>
+      <h2>Instruções</h2>
+      <ul class="muted" style="line-height:1.8">
+        <li>A prova contém <b>${QUESTIONS.length} questões</b>.</li>
+        <li>Há apenas uma alternativa correta por questão.</li>
+        <li>As questões e alternativas são apresentadas em ordem aleatória.</li>
+        <li>Depois de enviada, a avaliação fica registrada e você poderá consultar o resultado.</li>
+        <li>Se precisar refazer a prova, o administrador deverá liberar uma nova tentativa.</li>
+      </ul>
+      <div class="grid grid2" style="margin-top:20px">
+        <div><b>Nome</b><div class="muted">${esc(profile.name)}</div></div>
+        <div><b>Empresa</b><div class="muted">${esc(profile.empresa||"—")}</div></div>
+        <div><b>CPF</b><div class="muted">${esc(profile.cpf)}</div></div>
+        <div><b>Tipo</b><div class="muted">Usuário padrão</div></div>
+      </div>
+      <div class="actions" style="margin-top:26px"><button class="btn primary" id="startBtn">Iniciar avaliação</button></div>
+    </div>`);
+  document.getElementById("startBtn").onclick=()=>{quiz=makeQuiz();renderQuiz()};
+}
+
+function renderQuiz(){
+  const q=quiz.questions[quiz.index];
+  selected=quiz.answers[q.id]||null;
+  const total=quiz.questions.length, n=quiz.index+1, pct=Math.round((n-1)/total*100);
+  shell("Avaliação Técnica HNR","Questão "+n+" de "+total,`
+    <div class="quiz-layout">
+      <aside class="card side">
+        <b>Progresso</b><div class="progress" style="margin:12px 0 16px"><div style="width:${pct}%"></div></div>
+        <div class="qnums">${quiz.questions.map((x,i)=>`<div class="qnum ${i<quiz.index?"done":i===quiz.index?"current":""}">${String(i+1).padStart(2,"0")}</div>`).join("")}</div>
+      </aside>
+      <section class="card question">
+        <div class="small muted">Questão ${n}</div>
+        <div class="qtitle">${esc(q.text)}</div>
+        <div id="opts">${Object.entries(q.options).map(([k,v])=>`
+          <label class="option ${selected===k?"selected":""}" data-key="${k}">
+            <input type="radio" name="answer" value="${k}" ${selected===k?"checked":""}>
+            <b>${k})</b> ${esc(v)}
+          </label>`).join("")}</div>
+        <div class="quiz-footer">
+          <button class="btn secondary" id="prev" ${quiz.index===0?"disabled":""}>Anterior</button>
+          <button class="btn primary" id="next">${quiz.index===total-1?"Finalizar avaliação":"Próxima"}</button>
+        </div>
+      </section>
+    </div>`);
+  document.querySelectorAll(".option").forEach(el=>el.onclick=()=>{
+    selected=el.dataset.key;quiz.answers[q.id]=selected;
+    document.querySelectorAll(".option").forEach(x=>x.classList.remove("selected"));
+    el.classList.add("selected");
+    el.querySelector("input").checked=true;
+  });
+  document.getElementById("prev").onclick=()=>{if(quiz.index>0){quiz.index--;renderQuiz()}};
+  document.getElementById("next").onclick=async()=>{
+    if(!selected){alert("Selecione uma alternativa antes de continuar.");return}
+    if(quiz.index<total-1){quiz.index++;renderQuiz();return}
+    await finishQuiz();
+  };
+}
+
+async function finishQuiz(){
+  const total=quiz.questions.length;
+  let correct=0;
+  const answers=quiz.questions.map(q=>{const userAnswer=quiz.answers[q.id]||null;if(userAnswer===q.correct)correct++;return {id:q.id,userAnswer,correctAnswer:q.correct}});
+  const result={uid:currentUser.uid,cpf:normalizeCPF(currentUser.email.split("@")[0]),score:correct,total,percentage:Number((correct/total*100).toFixed(2)),answers,startedAt:quiz.startedAt,finishedAt:Date.now(),createdAt:serverTimestamp()};
+  await setDoc(doc(db,"evaluations",currentUser.uid),result);
+  const profile=await loadProfile(currentUser.uid);
+  renderUserResult(profile,{...result});
+}
+
+function renderUserResult(profile,result){
+  shell("Resultado da Avaliação HNR",profile.name||profile.cpf,`
+    <div class="card result" style="max-width:850px;margin:20px auto">
+      <div class="small muted">AVALIAÇÃO CONCLUÍDA</div>
+      <div class="score">${result.percentage}%</div>
+      <h2>${result.score} acertos de ${result.total}</h2>
+      <p class="muted">Finalizada em ${fmtDate(result.finishedAt)}</p>
+      <div class="grid grid3" style="margin:26px 0;text-align:left">
+        <div><b>Nome</b><div class="muted">${esc(profile.name)}</div></div>
+        <div><b>Empresa</b><div class="muted">${esc(profile.empresa||"—")}</div></div>
+        <div><b>CPF</b><div class="muted">${esc(profile.cpf)}</div></div>
+      </div>
+      <div class="actions" style="justify-content:center">
+        <button class="btn secondary" id="reviewBtn">Conferir respostas</button>
+      </div>
+    </div>
+    <div id="reviewArea" class="card review hidden" style="max-width:850px;margin:16px auto">
+      <h2>Conferência</h2>
+      ${result.answers.map((a,i)=>{
+        const q=QUESTIONS.find(x=>x.id===a.id);
+        const ok=a.userAnswer===a.correctAnswer;
+        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(a.correctAnswer)}</b></p></div>`
+      }).join("")}
+    </div>`);
+  document.getElementById("reviewBtn").onclick=()=>document.getElementById("reviewArea").classList.toggle("hidden");
+}
+
+async function renderAdmin(){
+  shell("Painel Administrativo HNR","Gestão de usuários e avaliações",`
+    <div class="admin-head"><div><h2 style="margin:0">Candidatos cadastrados</h2><div class="small muted">Administrador</div></div><button class="btn primary" id="newUserBtn">+ Novo usuário</button></div>
+    <div id="adminMsg"></div>
+    <div class="card table-wrap"><table class="table"><thead><tr><th>Nome</th><th>Empresa</th><th>CPF</th><th>Status</th><th>Nota</th><th>Ações</th></tr></thead><tbody id="usersBody"><tr><td colspan="6">Carregando...</td></tr></tbody></table></div>
+    <div class="card" style="padding:18px;margin-top:16px"><b>Importante</b><div class="small muted" style="margin-top:6px">As contas dos usuários são criadas no Firebase Authentication e as avaliações são armazenadas no Firestore. O CPF é usado apenas como identificador de login na interface.</div></div>`);
+  document.getElementById("newUserBtn").onclick=showNewUserModal;
+  await loadAdminUsers();
+}
+
+async function loadAdminUsers(){
+  const body=document.getElementById("usersBody");
+  try{
+    const snap=await getDocs(collection(db,"users"));
+    adminUsers=snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>u.role!=="ADMIN");
+    const evals={};
+    await Promise.all(adminUsers.map(async u=>{const s=await getDoc(doc(db,"evaluations",u.uid));if(s.exists())evals[u.uid]=s.data()}));
+    body.innerHTML=adminUsers.length?adminUsers.map(u=>{
+      const r=evals[u.uid];
+      return `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.empresa||"—")}</td><td>${esc(u.cpf)}</td><td>${r?'<span class="success" style="padding:4px 7px;border-radius:7px">Concluída</span>':'<span class="small muted">Pendente</span>'}</td><td>${r?esc(r.percentage+"%"):"—"}</td><td><div class="actions">${r?`<button class="btn secondary viewBtn" data-uid="${u.uid}">Ver resultado</button><button class="btn danger resetBtn" data-uid="${u.uid}">Liberar nova tentativa</button>`:""}<button class="btn secondary editBtn" data-uid="${u.uid}">Editar cadastro</button></div></td></tr>`;
+    }).join(""):`<tr><td colspan="6">Nenhum usuário padrão cadastrado.</td></tr>`;
+    document.querySelectorAll(".viewBtn").forEach(b=>b.onclick=()=>showEvaluation(b.dataset.uid));
+    document.querySelectorAll(".resetBtn").forEach(b=>b.onclick=()=>resetEvaluation(b.dataset.uid));
+    document.querySelectorAll(".editBtn").forEach(b=>b.onclick=()=>showEditUser(b.dataset.uid));
+  }catch(e){body.innerHTML=`<tr><td colspan="6" class="wrong">Erro ao carregar usuários: ${esc(e.message)}</td></tr>`}
+}
+
+function showNewUserModal(){
+  const m=document.createElement("div");m.className="modal";m.innerHTML=`
+  <div class="box"><h2>Novo usuário padrão</h2><div id="modalMsg"></div>
+  <form id="newUserForm">
+    <div class="grid grid2"><div class="field"><label>Nome</label><input id="uName" required></div><div class="field"><label>Empresa</label><input id="uEmpresa"></div></div>
+    <div class="grid grid2"><div class="field"><label>CPF</label><input id="uCpf" inputmode="numeric" required></div><div class="field"><label>Senha</label><input id="uPass" type="password" minlength="6" required><div class="small muted">Mínimo de 6 caracteres (exigência do Firebase Authentication).</div></div></div>
+    <div class="actions"><button class="btn secondary" type="button" id="cancel">Cancelar</button><button class="btn primary">Cadastrar</button></div>
+  </form></div>`;
+  document.body.appendChild(m);
+  m.querySelector("#cancel").onclick=()=>m.remove();
+  m.querySelector("#newUserForm").onsubmit=async e=>{
+    e.preventDefault();
+    const msg=m.querySelector("#modalMsg");
+    const cpf=normalizeCPF(m.querySelector("#uCpf").value), name=m.querySelector("#uName").value.trim(), empresa=m.querySelector("#uEmpresa").value.trim(), password=m.querySelector("#uPass").value;
+    if(cpf.length!==11){msg.innerHTML='<div class="alert err">CPF deve conter 11 dígitos.</div>';return}
+    try{
+      const q=query(collection(db,"users"),where("cpf","==",cpf));const exists=await getDocs(q);
+      if(!exists.empty){msg.innerHTML='<div class="alert err">Este CPF já está cadastrado.</div>';return}
+      const secondary=initializeApp(firebaseConfig,"creator-"+Date.now());
+      const secondaryAuth=getAuth(secondary);
+      const cred=await createUserWithEmailAndPassword(secondaryAuth,userEmail(cpf),password);
+      await setDoc(doc(db,"users",cred.user.uid),{uid:cred.user.uid,cpf,name,empresa,role:"USER",createdAt:serverTimestamp(),createdBy:currentUser.uid});
+      await signOut(secondaryAuth);await deleteApp(secondary);
+      m.remove();await loadAdminUsers();alert("Usuário cadastrado com sucesso.");
+    }catch(err){msg.innerHTML=`<div class="alert err">${esc(err.message||"Erro ao cadastrar usuário.")}</div>`}
+  };
+}
+
+function showEditUser(uid){
+  const u=adminUsers.find(x=>x.uid===uid);if(!u)return;
+  const m=document.createElement("div");m.className="modal";m.innerHTML=`
+  <div class="box"><h2>Editar cadastro</h2><div id="editMsg"></div>
+  <form id="editForm"><div class="field"><label>Nome</label><input id="eName" value="${esc(u.name)}" required></div><div class="field"><label>Empresa</label><input id="eEmpresa" value="${esc(u.empresa||"")}"></div>
+  <div class="actions"><button type="button" class="btn secondary" id="cancel">Cancelar</button><button class="btn primary">Salvar</button></div></form></div>`;
+  document.body.appendChild(m);m.querySelector("#cancel").onclick=()=>m.remove();
+  m.querySelector("#editForm").onsubmit=async e=>{e.preventDefault();try{await setDoc(doc(db,"users",uid),{name:m.querySelector("#eName").value.trim(),empresa:m.querySelector("#eEmpresa").value.trim()},{merge:true});m.remove();await loadAdminUsers()}catch(err){m.querySelector("#editMsg").innerHTML=`<div class="alert err">${esc(err.message)}</div>`}};
+}
+
+async function showEvaluation(uid){
+  const u=adminUsers.find(x=>x.uid===uid);const s=await getDoc(doc(db,"evaluations",uid));if(!s.exists())return;
+  const r=s.data(), m=document.createElement("div");m.className="modal";m.innerHTML=`
+  <div class="box"><h2>Resultado — ${esc(u?.name||"")}</h2><div class="alert ok"><b>${esc(r.percentage)}%</b> — ${esc(r.score)} de ${esc(r.total)} acertos<br>Finalizada: ${esc(fmtDate(r.finishedAt))}</div>
+  <div class="review">${r.answers.map((a,i)=>{const q=QUESTIONS.find(x=>x.id===a.id);const ok=a.userAnswer===a.correctAnswer;return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(a.correctAnswer)}</b></p></div>`}).join("")}</div>
+  <button class="btn secondary" id="close">Fechar</button></div>`;
+  document.body.appendChild(m);m.querySelector("#close").onclick=()=>m.remove();
+}
+
+async function resetEvaluation(uid){
+  if(!confirm("Liberar uma nova tentativa para este usuário? O resultado atual será apagado."))return;
+  await deleteDoc(doc(db,"evaluations",uid));await loadAdminUsers();
+}
+
+onAuthStateChanged(auth,async user=>{
+  currentUser=user;
+  if(!user){renderLogin();return}
+  try{
+    if(user.email===ADMIN_EMAIL){await renderAdmin();return}
+    await renderUser();
+  }catch(e){console.error(e);await signOut(auth);renderLogin("Não foi possível carregar o sistema. Verifique a configuração do Firebase.");}
+});
+</script>
+
+<!--
+============================================================
+FIRESTORE SECURITY RULES
+============================================================
+Publique estas regras no Firebase Console > Firestore Database > Rules.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null &&
+             request.auth.token.email == "08007692444@admin.hnr.local";
+    }
+
+    match /users/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /evaluations/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if isAdmin();
+    }
+  }
+}
+============================================================
+FIREBASE AUTHENTICATION
+============================================================
+1. Ative Authentication > Sign-in method > Email/Password.
+2. Crie manualmente o administrador:
+   Email: 08007692444@admin.hnr.local
+   Senha: a senha administrativa escolhida por você.
+3. No sistema, o administrador continuará digitando somente o CPF.
+4. Usuários padrão são criados pelo próprio painel administrativo.
+
+IMPORTANTE:
+- O arquivo é 100% estático e pode ser hospedado no GitHub Pages.
+- Firebase funciona como banco/autenticação central, portanto os dados ficam disponíveis
+  para o administrador mesmo em computadores diferentes.
+- Para uma prova de alto grau de segurança/antifraude, recomenda-se um backend que faça
+  a correção no servidor. Nesta versão, a prova é client-side, portanto um usuário
+  tecnicamente avançado pode inspecionar o navegador.
+============================================================
+-->
+</body>
+</html>
