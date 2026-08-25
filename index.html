@@ -56,6 +56,22 @@ const FIRESTORE_DATABASE_ID = "ai-studio-bf0e812b-a02f-4585-87dd-51091859cd40";
 const ADMIN_CPF = "08007692444";
 const ADMIN_EMAIL = `${ADMIN_CPF}@admin.hnr.local`;
 
+const INITIAL_ADMINS = [
+  {name:"Bruno Souza", cpf:"08007692444", password:"ZuKR97ck"}
+];
+
+const INITIAL_USERS = [
+  {name:"Alexandre Muniz", cpf:"69865159449", password:"58321", empresa:""},
+  {name:"Eberton Helry", cpf:"05815068470", password:"74106", empresa:""},
+  {name:"Luiz Carlos", cpf:"10486179478", password:"29643", empresa:""},
+  {name:"Arthur Vinicius", cpf:"11629278440", password:"81572", empresa:""},
+  {name:"Higor Yang", cpf:"10986360406", password:"43095", empresa:""},
+  {name:"Ednaldo Vicente", cpf:"80963595415", password:"67218", empresa:""},
+  {name:"Marilon Vidal", cpf:"08328982447", password:"95430", empresa:""},
+  {name:"Yonald Ribeiro", cpf:"29200067468", password:"30764", empresa:""},
+  {name:"José Helio", cpf:"10865170401", password:"12859", empresa:""}
+];
+
 const appFirebase = initializeApp(firebaseConfig);
 const auth = getAuth(appFirebase);
 const db = getFirestore(appFirebase, FIRESTORE_DATABASE_ID);
@@ -71,7 +87,27 @@ const appEl = document.getElementById("app");
 
 function esc(v=""){return String(v).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
 function normalizeCPF(v=""){return String(v).replace(/\D/g,"");}
+function isValidCPF(cpf){
+  cpf=normalizeCPF(cpf);
+  if(cpf.length!==11 || /^(\d)\1{10}$/.test(cpf)) return false;
+  let sum=0;
+  for(let i=0;i<9;i++) sum += Number(cpf[i])*(10-i);
+  let d1=(sum*10)%11; if(d1===10)d1=0;
+  if(d1!==Number(cpf[9])) return false;
+  sum=0;
+  for(let i=0;i<10;i++) sum += Number(cpf[i])*(11-i);
+  let d2=(sum*10)%11; if(d2===10)d2=0;
+  return d2===Number(cpf[10]);
+}
 function userEmail(cpf){return `${normalizeCPF(cpf)}@usuarios.hnr.local`;}
+function getInitialAccount(cpf){
+  cpf=normalizeCPF(cpf);
+  return [...INITIAL_ADMINS,...INITIAL_USERS].find(u=>u.cpf===cpf)||null;
+}
+function getAuthPassword(cpf,password){
+  const account=getInitialAccount(cpf);
+  return account && account.password===password ? password+"HNR" : password;
+}
 function isAdmin(){return currentUser?.email === ADMIN_EMAIL;}
 function fmtDate(ts){if(!ts)return "—";try{const d=ts.toDate?ts.toDate():new Date(ts);return d.toLocaleString("pt-BR")}catch{return "—"}}
 function shuffle(a){a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -86,6 +122,16 @@ function shuffleOptions(q){
 function makeQuiz(){
   const ordered=shuffle(QUESTIONS).map(shuffleOptions);
   return {questions:ordered,index:0,answers:{},startedAt:Date.now()};
+}
+function calculateResult(result){
+  const answers=Array.isArray(result?.answers)?result.answers:[];
+  let score=0;
+  for(const a of answers){
+    const q=QUESTIONS.find(x=>x.id===String(a.id));
+    if(q && a.userAnswer && a.userAnswer===q.correct) score++;
+  }
+  const total=Number(result?.total)||QUESTIONS.length;
+  return {score,total,percentage:Number((score/total*100).toFixed(2))};
 }
 
 function shell(title,subtitle="",body=""){
@@ -115,11 +161,40 @@ function renderLogin(error=""){
     e.preventDefault();
     const cpf=normalizeCPF(document.getElementById("cpf").value);
     const password=document.getElementById("password").value;
-    if(!cpf){renderLogin("Informe um CPF válido.");return}
+    if(!isValidCPF(cpf)){renderLogin("Informe um CPF válido.");return}
     try{
-      await signInWithEmailAndPassword(auth, cpf===ADMIN_CPF?ADMIN_EMAIL:userEmail(cpf), password);
+      const email = cpf===ADMIN_CPF ? ADMIN_EMAIL : userEmail(cpf);
+      await signInWithEmailAndPassword(auth, email, getAuthPassword(cpf,password));
     }catch(err){renderLogin("CPF ou senha incorretos.");}
   };
+}
+
+async function provisionInitialAccounts(){
+  for(const account of INITIAL_USERS){
+    const email=userEmail(account.cpf);
+    const secondary=initializeApp(firebaseConfig,"provision-"+account.cpf+"-"+Date.now());
+    const secondaryAuth=getAuth(secondary);
+    try{
+      let uid;
+      try{
+        const cred=await createUserWithEmailAndPassword(secondaryAuth,email,account.password+"HNR");
+        uid=cred.user.uid;
+      }catch(err){
+        if(err?.code!=="auth/email-already-in-use") throw err;
+        const cred=await signInWithEmailAndPassword(secondaryAuth,email,account.password+"HNR");
+        uid=cred.user.uid;
+      }
+      await setDoc(doc(db,"users",uid),{
+        uid,cpf:account.cpf,name:account.name,empresa:account.empresa||"",
+        role:"USER",seeded:true,createdAt:serverTimestamp()
+      },{merge:true});
+    }catch(err){
+      console.error("Falha ao provisionar usuário inicial:",account.cpf,err);
+    }finally{
+      try{await signOut(secondaryAuth)}catch(_){}
+      try{await deleteApp(secondary)}catch(_){}
+    }
+  }
 }
 
 async function loadProfile(uid){
@@ -199,20 +274,28 @@ function renderQuiz(){
 
 async function finishQuiz(){
   const total=quiz.questions.length;
-  let correct=0;
-  const answers=quiz.questions.map(q=>{const userAnswer=quiz.answers[q.id]||null;if(userAnswer===q.correct)correct++;return {id:q.id,userAnswer,correctAnswer:q.correct}});
-  const result={uid:currentUser.uid,cpf:normalizeCPF(currentUser.email.split("@")[0]),score:correct,total,percentage:Number((correct/total*100).toFixed(2)),answers,startedAt:quiz.startedAt,finishedAt:Date.now(),createdAt:serverTimestamp()};
+  const answers=quiz.questions.map(q=>({id:q.id,userAnswer:quiz.answers[q.id]||null}));
+  const result={
+    uid:currentUser.uid,
+    cpf:normalizeCPF(currentUser.email.split("@")[0]),
+    total,
+    answers,
+    startedAt:quiz.startedAt,
+    finishedAt:Date.now(),
+    createdAt:serverTimestamp()
+  };
   await setDoc(doc(db,"evaluations",currentUser.uid),result);
   const profile=await loadProfile(currentUser.uid);
-  renderUserResult(profile,{...result});
+  renderUserResult(profile,result);
 }
 
 function renderUserResult(profile,result){
+  const calculated=calculateResult(result);
   shell("Resultado da Avaliação HNR",profile.name||profile.cpf,`
     <div class="card result" style="max-width:850px;margin:20px auto">
       <div class="small muted">AVALIAÇÃO CONCLUÍDA</div>
-      <div class="score">${result.percentage}%</div>
-      <h2>${result.score} acertos de ${result.total}</h2>
+      <div class="score">${calculated.percentage}%</div>
+      <h2>${calculated.score} acertos de ${calculated.total}</h2>
       <p class="muted">Finalizada em ${fmtDate(result.finishedAt)}</p>
       <div class="grid grid3" style="margin:26px 0;text-align:left">
         <div><b>Nome</b><div class="muted">${esc(profile.name)}</div></div>
@@ -227,8 +310,8 @@ function renderUserResult(profile,result){
       <h2>Conferência</h2>
       ${result.answers.map((a,i)=>{
         const q=QUESTIONS.find(x=>x.id===a.id);
-        const ok=a.userAnswer===a.correctAnswer;
-        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(a.correctAnswer)}</b></p></div>`
+        const ok=q && a.userAnswer===q.correct;
+        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(q?.correct||"—")}</b></p></div>`
       }).join("")}
     </div>`);
   document.getElementById("reviewBtn").onclick=()=>document.getElementById("reviewArea").classList.toggle("hidden");
@@ -250,7 +333,13 @@ async function loadAdminUsers(){
     const snap=await getDocs(collection(db,"users"));
     adminUsers=snap.docs.map(d=>({uid:d.id,...d.data()})).filter(u=>u.role!=="ADMIN");
     const evals={};
-    await Promise.all(adminUsers.map(async u=>{const s=await getDoc(doc(db,"evaluations",u.uid));if(s.exists())evals[u.uid]=s.data()}));
+    await Promise.all(adminUsers.map(async u=>{
+      const s=await getDoc(doc(db,"evaluations",u.uid));
+      if(s.exists()){
+        const data=s.data();
+        evals[u.uid]={...data,...calculateResult(data)};
+      }
+    }));
     body.innerHTML=adminUsers.length?adminUsers.map(u=>{
       const r=evals[u.uid];
       return `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.empresa||"—")}</td><td>${esc(u.cpf)}</td><td>${r?'<span class="success" style="padding:4px 7px;border-radius:7px">Concluída</span>':'<span class="small muted">Pendente</span>'}</td><td>${r?esc(r.percentage+"%"):"—"}</td><td><div class="actions">${r?`<button class="btn secondary viewBtn" data-uid="${u.uid}">Ver resultado</button><button class="btn danger resetBtn" data-uid="${u.uid}">Liberar nova tentativa</button>`:""}<button class="btn secondary editBtn" data-uid="${u.uid}">Editar cadastro</button></div></td></tr>`;
@@ -266,7 +355,7 @@ function showNewUserModal(){
   <div class="box"><h2>Novo usuário padrão</h2><div id="modalMsg"></div>
   <form id="newUserForm">
     <div class="grid grid2"><div class="field"><label>Nome</label><input id="uName" required></div><div class="field"><label>Empresa</label><input id="uEmpresa"></div></div>
-    <div class="grid grid2"><div class="field"><label>CPF</label><input id="uCpf" inputmode="numeric" required></div><div class="field"><label>Senha</label><input id="uPass" type="password" minlength="6" required><div class="small muted">Mínimo de 6 caracteres (exigência do Firebase Authentication).</div></div></div>
+    <div class="grid grid2"><div class="field"><label>CPF</label><input id="uCpf" inputmode="numeric" required></div><div class="field"><label>Senha</label><input id="uPass" type="password" minlength="6" required><div class="small muted">A senha informada é a senha usada pelo usuário no login. O sistema adapta internamente ao requisito do Firebase.</div></div></div>
     <div class="actions"><button class="btn secondary" type="button" id="cancel">Cancelar</button><button class="btn primary">Cadastrar</button></div>
   </form></div>`;
   document.body.appendChild(m);
@@ -275,17 +364,33 @@ function showNewUserModal(){
     e.preventDefault();
     const msg=m.querySelector("#modalMsg");
     const cpf=normalizeCPF(m.querySelector("#uCpf").value), name=m.querySelector("#uName").value.trim(), empresa=m.querySelector("#uEmpresa").value.trim(), password=m.querySelector("#uPass").value;
-    if(cpf.length!==11){msg.innerHTML='<div class="alert err">CPF deve conter 11 dígitos.</div>';return}
+    if(!isValidCPF(cpf)){msg.innerHTML='<div class="alert err">Informe um CPF válido com 11 dígitos.</div>';return}
+    if(password.length<5){msg.innerHTML='<div class="alert err">A senha deve ter pelo menos 5 caracteres.</div>';return}
     try{
       const q=query(collection(db,"users"),where("cpf","==",cpf));const exists=await getDocs(q);
       if(!exists.empty){msg.innerHTML='<div class="alert err">Este CPF já está cadastrado.</div>';return}
       const secondary=initializeApp(firebaseConfig,"creator-"+Date.now());
       const secondaryAuth=getAuth(secondary);
-      const cred=await createUserWithEmailAndPassword(secondaryAuth,userEmail(cpf),password);
-      await setDoc(doc(db,"users",cred.user.uid),{uid:cred.user.uid,cpf,name,empresa,role:"USER",createdAt:serverTimestamp(),createdBy:currentUser.uid});
-      await signOut(secondaryAuth);await deleteApp(secondary);
-      m.remove();await loadAdminUsers();alert("Usuário cadastrado com sucesso.");
-    }catch(err){msg.innerHTML=`<div class="alert err">${esc(err.message||"Erro ao cadastrar usuário.")}</div>`}
+      let cred=null;
+      try{
+        cred=await createUserWithEmailAndPassword(secondaryAuth,userEmail(cpf),password+"HNR");
+        await setDoc(doc(db,"users",cred.user.uid),{
+          uid:cred.user.uid,cpf,name,empresa,role:"USER",
+          createdAt:serverTimestamp(),createdBy:currentUser.uid
+        });
+        m.remove();await loadAdminUsers();alert("Usuário cadastrado com sucesso.");
+      }catch(err){
+        if(cred?.user){
+          try{await cred.user.delete()}catch(_){}
+        }
+        msg.innerHTML=`<div class="alert err">${esc(err.message||"Erro ao cadastrar usuário.")}</div>`;
+      }finally{
+        try{await signOut(secondaryAuth)}catch(_){}
+        try{await deleteApp(secondary)}catch(_){}
+      }
+    }catch(err){
+      msg.innerHTML=`<div class="alert err">${esc(err.message||"Erro ao cadastrar usuário.")}</div>`;
+    }
   };
 }
 
@@ -301,23 +406,33 @@ function showEditUser(uid){
 
 async function showEvaluation(uid){
   const u=adminUsers.find(x=>x.uid===uid);const s=await getDoc(doc(db,"evaluations",uid));if(!s.exists())return;
-  const r=s.data(), m=document.createElement("div");m.className="modal";m.innerHTML=`
-  <div class="box"><h2>Resultado — ${esc(u?.name||"")}</h2><div class="alert ok"><b>${esc(r.percentage)}%</b> — ${esc(r.score)} de ${esc(r.total)} acertos<br>Finalizada: ${esc(fmtDate(r.finishedAt))}</div>
-  <div class="review">${r.answers.map((a,i)=>{const q=QUESTIONS.find(x=>x.id===a.id);const ok=a.userAnswer===a.correctAnswer;return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(a.correctAnswer)}</b></p></div>`}).join("")}</div>
+  const r=s.data(), calculated=calculateResult(r), m=document.createElement("div");m.className="modal";m.innerHTML=`
+  <div class="box"><h2>Resultado — ${esc(u?.name||"")}</h2><div class="alert ok"><b>${esc(calculated.percentage)}%</b> — ${esc(calculated.score)} de ${esc(calculated.total)} acertos<br>Finalizada: ${esc(fmtDate(r.finishedAt))}</div>
+  <div class="review">${r.answers.map((a,i)=>{const q=QUESTIONS.find(x=>x.id===a.id);const ok=q && a.userAnswer===q.correct;return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(q?.correct||"—")}</b></p></div>`}).join("")}</div>
   <button class="btn secondary" id="close">Fechar</button></div>`;
   document.body.appendChild(m);m.querySelector("#close").onclick=()=>m.remove();
 }
 
 async function resetEvaluation(uid){
   if(!confirm("Liberar uma nova tentativa para este usuário? O resultado atual será apagado."))return;
-  await deleteDoc(doc(db,"evaluations",uid));await loadAdminUsers();
+  try{
+    await deleteDoc(doc(db,"evaluations",uid));
+    await loadAdminUsers();
+    alert("Nova tentativa liberada.");
+  }catch(err){
+    alert("Não foi possível liberar a nova tentativa: "+(err.message||"erro desconhecido"));
+  }
 }
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
   if(!user){renderLogin();return}
   try{
-    if(user.email===ADMIN_EMAIL){await renderAdmin();return}
+    if(user.email===ADMIN_EMAIL){
+      await provisionInitialAccounts();
+      await renderAdmin();
+      return
+    }
     await renderUser();
   }catch(e){console.error(e);await signOut(auth);renderLogin("Não foi possível carregar o sistema. Verifique a configuração do Firebase.");}
 });
@@ -344,7 +459,17 @@ service cloud.firestore {
 
     match /evaluations/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
-      allow create, update: if request.auth != null && request.auth.uid == uid;
+
+      // O usuário pode enviar sua própria avaliação, mas não pode alterar
+      // uma avaliação já concluída.
+      allow create: if request.auth != null &&
+                       request.auth.uid == uid &&
+                       request.resource.data.uid == uid &&
+                       request.resource.data.keys().hasOnly([
+                         "uid","cpf","total","answers","startedAt","finishedAt","createdAt"
+                       ]);
+
+      allow update: if false;
       allow delete: if isAdmin();
     }
   }
@@ -353,19 +478,39 @@ service cloud.firestore {
 FIREBASE AUTHENTICATION
 ============================================================
 1. Ative Authentication > Sign-in method > Email/Password.
-2. Crie manualmente o administrador:
-   Email: 08007692444@admin.hnr.local
-   Senha: a senha administrativa escolhida por você.
-3. No sistema, o administrador continuará digitando somente o CPF.
-4. Usuários padrão são criados pelo próprio painel administrativo.
+2. Administrador inicial:
+   Bruno Souza — CPF 080.076.924-44 — senha de login ZuKR97ck.
+   Para o primeiro acesso, crie no Firebase Authentication o e-mail
+   08007692444@admin.hnr.local com a senha interna ZuKR97ckHNR.
+   Depois disso, o sistema provisionará os usuários padrão abaixo automaticamente.
+
+3. Usuários padrão iniciais:
+   Alexandre Muniz — 698.651.594-49 — 58321
+   Eberton Helry — 058.150.684-70 — 74106
+   Luiz Carlos — 104.861.794-78 — 29643
+   Arthur Vinicius — 116.292.784-40 — 81572
+   Higor Yang — 109.863.604-06 — 43095
+   Ednaldo Vicente — 809.635.954-15 — 67218
+   Marilon Vidal — 083.289.824-47 — 95430
+   Yonald Ribeiro — 292.000.674-68 — 30764
+   José Helio — 108.651.704-01 — 12859
+
+4. O administrador continua podendo cadastrar novos usuários pelo painel.
 
 IMPORTANTE:
 - O arquivo é 100% estático e pode ser hospedado no GitHub Pages.
 - Firebase funciona como banco/autenticação central, portanto os dados ficam disponíveis
   para o administrador mesmo em computadores diferentes.
-- Para uma prova de alto grau de segurança/antifraude, recomenda-se um backend que faça
-  a correção no servidor. Nesta versão, a prova é client-side, portanto um usuário
-  tecnicamente avançado pode inspecionar o navegador.
+- As senhas iniciais estão incorporadas ao JavaScript porque esta é uma aplicação 100% estática.
+- O Firebase Authentication exige pelo menos 6 caracteres; por isso o sistema acrescenta internamente
+  "HNR" às senhas iniciais e às novas senhas cadastradas pelo painel. O usuário continua digitando
+  somente a senha definida na lista acima.
+- IMPORTANTE: como essas credenciais ficam no HTML, qualquer pessoa com acesso ao repositório pode
+  visualizá-las. Para uso real, recomenda-se tornar o repositório privado ou remover as credenciais
+  iniciais do código depois que as contas forem provisionadas.
+- Portanto, não é uma solução antifraude de alto nível: um usuário tecnicamente avançado
+  pode inspecionar o navegador. Para uma prova formal com proteção contra consulta ou
+  manipulação do gabarito, a correção deve ser feita em backend.
 ============================================================
 -->
 </body>
