@@ -14,10 +14,10 @@ button,input{font:inherit}.hidden{display:none!important}.wrap{max-width:1100px;
 input{width:100%;border:1px solid #cbd5e1;border-radius:10px;padding:12px;background:#f8fafc;outline:none}input:focus{border-color:var(--blue);box-shadow:0 0 0 3px #dbeafe}
 label{display:block;font-weight:700;font-size:13px;margin:0 0 7px}.field{margin-bottom:16px}
 .login{max-width:460px;margin:7vh auto}.login .head{background:#0f172a;color:#fff;padding:30px;text-align:center;border-radius:16px 16px 0 0}.login .body{padding:28px}
-.alert{padding:12px 14px;border-radius:10px;margin-bottom:16px;font-size:13px}.alert.err{background:#fee2e2;color:#991b1b}.alert.ok{background:#dcfce7;color:#166534}.alert.info{background:#dbeafe;color:#1e40af}
+.loading{display:inline-flex;align-items:center;justify-content:center;gap:10px}.spinner{width:18px;height:18px;border:3px solid #dbeafe;border-top-color:#2563eb;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.btn:disabled{opacity:.65;cursor:not-allowed}.alert{padding:12px 14px;border-radius:10px;margin-bottom:16px;font-size:13px}.alert.err{background:#fee2e2;color:#991b1b}.alert.ok{background:#dcfce7;color:#166534}.alert.info{background:#dbeafe;color:#1e40af}
 .actions{display:flex;gap:10px;flex-wrap:wrap}.grid{display:grid;gap:16px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .admin-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse;min-width:760px}.table th,.table td{padding:13px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}.table th{background:#f8fafc;color:#475569}
-.quiz-layout{display:grid;grid-template-columns:240px 1fr;gap:16px}.side{padding:18px;height:max-content;position:sticky;top:84px}.qnums{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.qnum{border:1px solid var(--line);background:#f8fafc;border-radius:7px;padding:8px;text-align:center;font-size:11px;font-weight:800}.qnum.done{background:#dcfce7;color:#166534;border-color:#bbf7d0}.qnum.current{background:#2563eb;color:#fff;border-color:#2563eb}
+.quiz-layout{display:grid;grid-template-columns:240px 1fr;gap:16px}.side{padding:18px;height:max-content;position:sticky;top:84px}.qnums{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.qnum{border:1px solid var(--line);background:#f8fafc;border-radius:7px;padding:8px;text-align:center;font-size:11px;font-weight:800}.qnum.done{background:#dcfce7;color:#166534;border-color:#bbf7d0}.qnum.current{background:#2563eb;color:#fff;border-color:#2563eb}.qnum.answered{background:#dcfce7;color:#166534;border-color:#bbf7d0}.qnum:hover{border-color:#93c5fd;transform:translateY(-1px)}
 .question{padding:26px}.progress{height:8px;background:#e2e8f0;border-radius:99px;overflow:hidden}.progress>div{height:100%;background:#2563eb;transition:width .2s}.qtitle{font-size:19px;line-height:1.5;font-weight:800;margin:18px 0}.option{display:block;border:1px solid var(--line);border-radius:12px;padding:15px;margin:10px 0;cursor:pointer;background:#fff}.option:hover{border-color:#93c5fd;background:#eff6ff}.option.selected{border-color:#2563eb;background:#eff6ff;box-shadow:0 0 0 2px #dbeafe}.option input{width:auto;margin-right:10px}.quiz-footer{display:flex;justify-content:space-between;gap:10px;margin-top:22px}
 .result{text-align:center;padding:28px}.score{font-size:52px;font-weight:900}.review{padding:20px}.review-item{border-top:1px solid var(--line);padding:18px 0}.correct{color:#166534}.wrong{color:#991b1b}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:18px;z-index:30}.modal .box{background:#fff;border-radius:16px;max-width:650px;width:100%;padding:24px;max-height:90vh;overflow:auto}
@@ -30,7 +30,7 @@ label{display:block;font-weight:700;font-size:13px;margin:0 0 7px}.field{margin-
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
-import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getFirestore, collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, serverTimestamp, runTransaction } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
 
 /* ============================================================
    CONFIGURAÇÃO
@@ -116,8 +116,60 @@ function shuffleOptions(q){
   "ABCD".split("").forEach((letter,i)=>{options[letter]=arr[i].text;if(arr[i].key===correctKey)newCorrect=letter});
   return {...q,options,correct:newCorrect};
 }
-function makeQuiz(){
-  const ordered=shuffle(QUESTIONS).map(shuffleOptions);
+const QUESTION_BLOCKS = [
+  {name:"Bloco 1", ids:Array.from({length:20},(_,i)=>String(i+1))},
+  {name:"Bloco 2", ids:Array.from({length:20},(_,i)=>String(i+21))},
+  {name:"Bloco 3", ids:Array.from({length:20},(_,i)=>String(i+41))},
+  {name:"Bloco 4", ids:Array.from({length:20},(_,i)=>String(i+61))},
+  {name:"Bloco 5", ids:Array.from({length:20},(_,i)=>String(i+81))}
+];
+const QUESTIONS_PER_BLOCK=4;
+const COMBINATIONS_20_4=4845;
+function unrankCombination(n,k,rank){
+  const result=[]; let next=0;
+  for(let i=0;i<k;i++){
+    for(let v=next;v<=n-k+i;v++){
+      const remaining=n-v-1, need=k-i-1;
+      let count=1;
+      for(let a=1;a<=need;a++) count=count*(remaining-need+a)/a;
+      count=Math.round(count);
+      if(rank<count){result.push(v);next=v+1;break}
+      rank-=count;
+    }
+  }
+  return result;
+}
+function questionIdsFromSequence(seq){
+  const ids=[];
+  for(let b=0;b<QUESTION_BLOCKS.length;b++){
+    const block=QUESTION_BLOCKS[b].ids;
+    const rank=(seq*9973 + b*7919) % COMBINATIONS_20_4;
+    const indexes=unrankCombination(block.length,QUESTIONS_PER_BLOCK,rank);
+    indexes.forEach(i=>ids.push(block[i]));
+  }
+  return shuffle(ids);
+}
+async function getOrCreateQuizAssignment(){
+  const ref=doc(db,"quizAssignments",currentUser.uid);
+  const existing=await getDoc(ref);
+  if(existing.exists() && Array.isArray(existing.data().questionIds) && existing.data().questionIds.length===20){
+    return existing.data().questionIds;
+  }
+  const seq=await runTransaction(db,async(tx)=>{
+    const counterRef=doc(db,"quizCounters","global");
+    const snap=await tx.get(counterRef);
+    const next=snap.exists()?Number(snap.data().nextNumber)||0:0;
+    const assigned=next;
+    tx.set(counterRef,{nextNumber:next+1},{merge:false});
+    return assigned;
+  });
+  const questionIds=questionIdsFromSequence(seq);
+  await setDoc(ref,{uid:currentUser.uid,questionIds,sequence:seq,createdAt:serverTimestamp()});
+  return questionIds;
+}
+function makeQuiz(questionIds){
+  const selectedQuestions=questionIds.map(id=>QUESTIONS.find(q=>q.id===String(id))).filter(Boolean);
+  const ordered=shuffle(selectedQuestions).map(shuffleOptions);
   return {questions:ordered,index:0,answers:{},startedAt:Date.now()};
 }
 function calculateResult(result){
@@ -125,9 +177,13 @@ function calculateResult(result){
   let score=0;
   for(const a of answers){
     const q=QUESTIONS.find(x=>x.id===String(a.id));
-    if(q && a.userAnswer && a.userAnswer===q.correct) score++;
+    if(!q || a.userAnswer==null) continue;
+    const correctText=q.options[q.correct];
+    // Current evaluations store the selected alternative text. The fallback
+    // also keeps compatibility with older evaluations that stored the letter.
+    if(a.userAnswer===correctText || a.userAnswer===q.correct) score++;
   }
-  const total=Number(result?.total)||QUESTIONS.length;
+  const total=Number(result?.total)||answers.length||20;
   return {score,total,percentage:Number((score/total*100).toFixed(2))};
 }
 
@@ -163,6 +219,10 @@ function renderLogin(error=""){
       renderLogin("Preparando o sistema de autenticação. Tente novamente em alguns segundos.");
       return;
     }
+    const form=document.getElementById("loginForm");
+    const submit=form.querySelector("button[type=submit]");
+    submit.disabled=true;
+    submit.innerHTML='<span class="loading"><span class="spinner"></span>Entrando...</span>';
     try{
       const email = cpf===ADMIN_CPF ? ADMIN_EMAIL : userEmail(cpf);
       await signInWithEmailAndPassword(auth, email, getAuthPassword(cpf,password));
@@ -280,8 +340,10 @@ function renderUserStart(profile){
       <div class="alert info"><b>Olá, ${esc(profile.name||"usuário")}.</b><br>Você está prestes a iniciar sua avaliação individual.</div>
       <h2>Instruções</h2>
       <ul class="muted" style="line-height:1.8">
-        <li>A prova contém <b>${QUESTIONS.length} questões</b>.</li>
+        <li>A prova contém <b>20 questões</b>, sorteadas aleatoriamente do banco de 100 questões.</li>
         <li>Há apenas uma alternativa correta por questão.</li>
+        <li>As 20 questões são distribuídas em <b>5 blocos</b>, com 4 questões sorteadas de cada bloco.</li>
+        <li>Você pode navegar livremente entre as questões, inclusive voltar a questões já respondidas ou avançar para qualquer questão.</li>
         <li>As questões e alternativas são apresentadas em ordem aleatória.</li>
         <li>Depois de enviada, a avaliação fica registrada e você poderá consultar o resultado.</li>
         <li>Se precisar refazer a prova, o administrador deverá liberar uma nova tentativa.</li>
@@ -294,21 +356,42 @@ function renderUserStart(profile){
       </div>
       <div class="actions" style="margin-top:26px"><button class="btn primary" id="startBtn">Iniciar avaliação</button></div>
     </div>`);
-  document.getElementById("startBtn").onclick=()=>{quiz=makeQuiz();renderQuiz()};
+  document.getElementById("startBtn").onclick=async()=>{
+    const btn=document.getElementById("startBtn");
+    btn.disabled=true;
+    btn.innerHTML='<span class="loading"><span class="spinner"></span>Preparando sua prova...</span>';
+    try{
+      const questionIds=await getOrCreateQuizAssignment();
+      quiz=makeQuiz(questionIds);
+      renderQuiz();
+    }catch(err){
+      console.error(err);
+      btn.disabled=false;
+      btn.textContent="Iniciar avaliação";
+      alert("Não foi possível preparar a avaliação. Verifique sua conexão e tente novamente.");
+    }
+  };
 }
 
 function renderQuiz(){
   const q=quiz.questions[quiz.index];
   selected=quiz.answers[q.id]||null;
-  const total=quiz.questions.length, n=quiz.index+1, pct=Math.round((n-1)/total*100);
-  shell("Avaliação Técnica HNR","Questão "+n+" de "+total,`
+  const total=quiz.questions.length, n=quiz.index+1;
+  const answeredCount=Object.keys(quiz.answers).filter(id=>quiz.questions.some(x=>x.id===id)).length;
+  const pct=Math.round(answeredCount/total*100);
+  shell("Avaliação Técnica HNR",`Questão ${n} de ${total}`,`
     <div class="quiz-layout">
       <aside class="card side">
         <b>Progresso</b><div class="progress" style="margin:12px 0 16px"><div style="width:${pct}%"></div></div>
-        <div class="qnums">${quiz.questions.map((x,i)=>`<div class="qnum ${i<quiz.index?"done":i===quiz.index?"current":""}">${String(i+1).padStart(2,"0")}</div>`).join("")}</div>
+        <div class="small muted" style="margin-bottom:12px">${answeredCount} de ${total} respondidas</div>
+        <div class="qnums">${quiz.questions.map((x,i)=>{
+          const answered=quiz.answers[x.id]!=null;
+          return `<button type="button" class="qnum ${answered?"answered ":""}${i===quiz.index?"current":""}" data-index="${i}" title="Ir para a questão ${i+1}">${String(i+1).padStart(2,"0")}</button>`
+        }).join("")}</div>
+        <div class="small muted" style="margin-top:14px;line-height:1.6">Clique em qualquer número para ir diretamente à questão. Verde = respondida.</div>
       </aside>
       <section class="card question">
-        <div class="small muted">Questão ${n}</div>
+        <div class="small muted">Questão ${n} de ${total}</div>
         <div class="qtitle">${esc(q.text)}</div>
         <div id="opts">${Object.entries(q.options).map(([k,v])=>`
           <label class="option ${selected===k?"selected":""}" data-key="${k}">
@@ -326,18 +409,40 @@ function renderQuiz(){
     document.querySelectorAll(".option").forEach(x=>x.classList.remove("selected"));
     el.classList.add("selected");
     el.querySelector("input").checked=true;
+    // Update the question navigator immediately without forcing a navigation.
+    document.querySelectorAll(".qnum").forEach(btn=>{
+      const i=Number(btn.dataset.index), qq=quiz.questions[i];
+      btn.classList.toggle("answered",quiz.answers[qq.id]!=null);
+    });
+  });
+  document.querySelectorAll(".qnum").forEach(btn=>btn.onclick=()=>{
+    quiz.index=Number(btn.dataset.index);
+    renderQuiz();
   });
   document.getElementById("prev").onclick=()=>{if(quiz.index>0){quiz.index--;renderQuiz()}};
   document.getElementById("next").onclick=async()=>{
-    if(!selected){alert("Selecione uma alternativa antes de continuar.");return}
-    if(quiz.index<total-1){quiz.index++;renderQuiz();return}
+    if(quiz.index<total-1){
+      quiz.index++;
+      renderQuiz();
+      return;
+    }
+    if(Object.keys(quiz.answers).length<total){
+      const unanswered=quiz.questions.filter(x=>quiz.answers[x.id]==null).map((_,i)=>i+1);
+      const ok=confirm(`Existem ${unanswered.length} questões sem resposta. Deseja finalizar mesmo assim?`);
+      if(!ok)return;
+    }
+    const btn=document.getElementById("next");
+    btn.disabled=true;
+    btn.innerHTML='<span class="loading"><span class="spinner"></span>Enviando...</span>';
     await finishQuiz();
   };
 }
-
 async function finishQuiz(){
   const total=quiz.questions.length;
-  const answers=quiz.questions.map(q=>({id:q.id,userAnswer:quiz.answers[q.id]||null}));
+  const answers=quiz.questions.map(q=>({
+    id:q.id,
+    userAnswer:quiz.answers[q.id]!=null ? q.options[quiz.answers[q.id]] : null
+  }));
   const result={
     uid:currentUser.uid,
     cpf:normalizeCPF(currentUser.email.split("@")[0]),
@@ -373,8 +478,9 @@ function renderUserResult(profile,result){
       <h2>Conferência</h2>
       ${result.answers.map((a,i)=>{
         const q=QUESTIONS.find(x=>x.id===a.id);
-        const ok=q && a.userAnswer===q.correct;
-        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(q?.correct||"—")}</b></p></div>`
+        const correctText=q?.options?.[q?.correct];
+        const ok=q && (a.userAnswer===correctText || a.userAnswer===q.correct);
+        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(correctText||"—")}</b></p></div>`
       }).join("")}
     </div>`);
   document.getElementById("reviewBtn").onclick=()=>document.getElementById("reviewArea").classList.toggle("hidden");
@@ -471,7 +577,7 @@ async function showEvaluation(uid){
   const u=adminUsers.find(x=>x.uid===uid);const s=await getDoc(doc(db,"evaluations",uid));if(!s.exists())return;
   const r=s.data(), calculated=calculateResult(r), m=document.createElement("div");m.className="modal";m.innerHTML=`
   <div class="box"><h2>Resultado — ${esc(u?.name||"")}</h2><div class="alert ok"><b>${esc(calculated.percentage)}%</b> — ${esc(calculated.score)} de ${esc(calculated.total)} acertos<br>Finalizada: ${esc(fmtDate(r.finishedAt))}</div>
-  <div class="review">${r.answers.map((a,i)=>{const q=QUESTIONS.find(x=>x.id===a.id);const ok=q && a.userAnswer===q.correct;return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(q?.correct||"—")}</b></p></div>`}).join("")}</div>
+  <div class="review">${r.answers.map((a,i)=>{const q=QUESTIONS.find(x=>x.id===a.id);const correctText=q?.options?.[q?.correct];const ok=q && (a.userAnswer===correctText || a.userAnswer===q.correct);return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(correctText||"—")}</b></p></div>`}).join("")}</div>
   <button class="btn secondary" id="close">Fechar</button></div>`;
   document.body.appendChild(m);m.querySelector("#close").onclick=()=>m.remove();
 }
@@ -480,6 +586,7 @@ async function resetEvaluation(uid){
   if(!confirm("Liberar uma nova tentativa para este usuário? O resultado atual será apagado."))return;
   try{
     await deleteDoc(doc(db,"evaluations",uid));
+    await deleteDoc(doc(db,"quizAssignments",uid));
     await loadAdminUsers();
     alert("Nova tentativa liberada.");
   }catch(err){
@@ -540,6 +647,20 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
       allow create, update, delete: if isAdmin();
+    }
+
+    match /quizAssignments/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow create: if request.auth != null && request.auth.uid == uid && request.resource.data.uid == uid;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /quizCounters/{id} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && id == "global" && request.resource.data.keys().hasOnly(["nextNumber"]) && request.resource.data.nextNumber == 1;
+      allow update: if request.auth != null && id == "global" && request.resource.data.keys().hasOnly(["nextNumber"]) && request.resource.data.nextNumber == resource.data.nextNumber + 1;
+      allow delete: if isAdmin();
     }
 
     match /evaluations/{uid} {
