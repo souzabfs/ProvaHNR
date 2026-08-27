@@ -25,7 +25,7 @@ label{display:block;font-weight:700;font-size:13px;margin:0 0 7px}.field{margin-
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div class="wrap"><div class="card login"><div class="body" style="text-align:center;padding:50px">Preparando o sistema...</div></div></div></div>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -48,11 +48,8 @@ const firebaseConfig = {
 };
 const FIRESTORE_DATABASE_ID = "ai-studio-bf0e812b-a02f-4585-87dd-51091859cd40";
 
-/* CPF administrativo inicial. O usuário admin deve ser criado
-   uma vez em Firebase Authentication usando:
-   CPF: 08007692444
-   Senha: a senha definida por você no Firebase.
-*/
+/* Contas iniciais. O sistema tenta provisioná-las automaticamente no
+   Firebase Authentication ao abrir o site. */
 const ADMIN_CPF = "08007692444";
 const ADMIN_EMAIL = `${ADMIN_CPF}@admin.hnr.local`;
 
@@ -162,37 +159,81 @@ function renderLogin(error=""){
     const cpf=normalizeCPF(document.getElementById("cpf").value);
     const password=document.getElementById("password").value;
     if(!isValidCPF(cpf)){renderLogin("Informe um CPF válido.");return}
+    if(!authProvisionReady){
+      renderLogin("Preparando o sistema de autenticação. Tente novamente em alguns segundos.");
+      return;
+    }
     try{
       const email = cpf===ADMIN_CPF ? ADMIN_EMAIL : userEmail(cpf);
       await signInWithEmailAndPassword(auth, email, getAuthPassword(cpf,password));
-    }catch(err){renderLogin("CPF ou senha incorretos.");}
+    }catch(err){
+      console.error("Erro de login:",err);
+      const code=err?.code||"";
+      if(code==="auth/user-not-found" || code==="auth/invalid-credential" || code==="auth/wrong-password"){
+        renderLogin("CPF ou senha incorretos.");
+      }else if(code==="auth/operation-not-allowed"){
+        renderLogin("Login por e-mail/senha está desativado no Firebase Authentication.");
+      }else{
+        renderLogin("Não foi possível entrar. Verifique a configuração do Firebase Authentication.");
+      }
+    }
   };
 }
 
-async function provisionInitialAccounts(){
-  for(const account of INITIAL_USERS){
-    const email=userEmail(account.cpf);
+async function provisionInitialAuthAccounts(){
+  const accounts=[...INITIAL_ADMINS,...INITIAL_USERS];
+  const failures=[];
+  for(const account of accounts){
+    const email=account.cpf===ADMIN_CPF?ADMIN_EMAIL:userEmail(account.cpf);
     const secondary=initializeApp(firebaseConfig,"provision-"+account.cpf+"-"+Date.now());
     const secondaryAuth=getAuth(secondary);
     try{
-      let uid;
       try{
-        const cred=await createUserWithEmailAndPassword(secondaryAuth,email,account.password+"HNR");
-        uid=cred.user.uid;
+        await createUserWithEmailAndPassword(
+          secondaryAuth,
+          email,
+          account.password+"HNR"
+        );
       }catch(err){
         if(err?.code!=="auth/email-already-in-use") throw err;
-        const cred=await signInWithEmailAndPassword(secondaryAuth,email,account.password+"HNR");
-        uid=cred.user.uid;
+        // The account already exists. Do not overwrite its password here.
       }
-      await setDoc(doc(db,"users",uid),{
-        uid,cpf:account.cpf,name:account.name,empresa:account.empresa||"",
-        role:"USER",seeded:true,createdAt:serverTimestamp()
-      },{merge:true});
     }catch(err){
-      console.error("Falha ao provisionar usuário inicial:",account.cpf,err);
+      console.error("Falha ao preparar conta:",account.cpf,err);
+      failures.push(account.cpf);
     }finally{
       try{await signOut(secondaryAuth)}catch(_){}
       try{await deleteApp(secondary)}catch(_){}
+    }
+  }
+  return failures;
+}
+
+async function ensureAdminAndInitialProfiles(){
+  // The admin is authenticated at this point, so Firestore rules allow these writes.
+  const adminAccount=INITIAL_ADMINS[0];
+  await setDoc(doc(db,"users",currentUser.uid),{
+    uid:currentUser.uid,
+    cpf:adminAccount.cpf,
+    name:adminAccount.name,
+    empresa:"",
+    role:"ADMIN",
+    seeded:true,
+    createdAt:serverTimestamp()
+  },{merge:true});
+
+  // Create/update the initial user profiles. Their Authentication accounts were
+  // prepared before the login screen was shown.
+  for(const account of INITIAL_USERS){
+    try{
+      const q=query(collection(db,"users"),where("cpf","==",account.cpf));
+      const snap=await getDocs(q);
+      if(!snap.empty) continue;
+
+      // We cannot know the Firebase UID without authenticating the user.
+      // The profile is therefore created on the user's first login if absent.
+    }catch(err){
+      console.error("Falha ao verificar perfil inicial:",account.cpf,err);
     }
   }
 }
@@ -203,8 +244,30 @@ async function loadProfile(uid){
 }
 
 async function renderUser(){
-  const profile=await loadProfile(currentUser.uid);
-  if(!profile){await signOut(auth);renderLogin("Usuário sem cadastro no sistema.");return}
+  let profile=await loadProfile(currentUser.uid);
+
+  if(!profile){
+    const cpf=normalizeCPF((currentUser.email||"").split("@")[0]);
+    const initial=getInitialAccount(cpf);
+    if(!initial){
+      await signOut(auth);
+      renderLogin("Usuário sem cadastro no sistema.");
+      return;
+    }
+    profile={
+      uid:currentUser.uid,
+      cpf:initial.cpf,
+      name:initial.name,
+      empresa:initial.empresa||"",
+      role:"USER",
+      seeded:true
+    };
+    await setDoc(doc(db,"users",currentUser.uid),{
+      ...profile,
+      createdAt:serverTimestamp()
+    },{merge:true});
+  }
+
   const resultSnap=await getDoc(doc(db,"evaluations",currentUser.uid));
   const result=resultSnap.exists()?resultSnap.data():null;
   if(result){renderUserResult(profile,result);return}
@@ -424,17 +487,39 @@ async function resetEvaluation(uid){
   }
 }
 
+let authProvisionReady=false;
+let authProvisionError="";
+async function boot(){
+  try{
+    const failures=await provisionInitialAuthAccounts();
+    if(failures.length){
+      authProvisionError="Não foi possível preparar algumas contas. Verifique o Firebase Authentication.";
+    }
+  }catch(err){
+    console.error(err);
+    authProvisionError="Não foi possível inicializar a autenticação.";
+  }finally{
+    authProvisionReady=true;
+    if(!currentUser) renderLogin(authProvisionError);
+  }
+}
+boot();
+
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){renderLogin();return}
+  if(!user){return}
   try{
     if(user.email===ADMIN_EMAIL){
-      await provisionInitialAccounts();
+      await ensureAdminAndInitialProfiles();
       await renderAdmin();
-      return
+      return;
     }
     await renderUser();
-  }catch(e){console.error(e);await signOut(auth);renderLogin("Não foi possível carregar o sistema. Verifique a configuração do Firebase.");}
+  }catch(e){
+    console.error(e);
+    await signOut(auth);
+    renderLogin("Não foi possível carregar o sistema. Verifique a configuração do Firebase.");
+  }
 });
 </script>
 
