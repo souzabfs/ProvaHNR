@@ -217,7 +217,7 @@ function renderLogin(error=""){
       <form id="loginForm">
         <div class="field"><label>CPF</label><input id="cpf" inputmode="numeric" maxlength="14" placeholder="Digite o CPF" required></div>
         <div class="field"><label>Senha</label><input id="password" type="password" placeholder="Digite a senha" required></div>
-        <button class="btn primary" style="width:100%">Entrar</button>
+        <button type="submit" class="btn primary" style="width:100%">Entrar</button>
       </form>
       <p class="small muted" style="text-align:center;margin-top:18px">Acesso individual. Cada usuário padrão visualiza somente a própria avaliação.</p>
     </div>
@@ -231,10 +231,29 @@ function renderLogin(error=""){
     const submit=form.querySelector("button[type=submit]");
     submit.disabled=true;
     submit.innerHTML='<span class="loading"><span class="spinner"></span>Entrando...</span>';
+    const loginTimeout=setTimeout(()=>{
+      if(submit.disabled){
+        submit.innerHTML='<span class="loading"><span class="spinner"></span>Conectando...</span>';
+      }
+    },2500);
     try{
       const email = cpf===ADMIN_CPF ? ADMIN_EMAIL : userEmail(cpf);
-      await signInWithEmailAndPassword(auth, email, getAuthPassword(cpf,password));
+      const account=getInitialAccount(cpf);
+      let authPassword=getAuthPassword(cpf,password);
+      try{
+        await signInWithEmailAndPassword(auth,email,authPassword);
+      }catch(firstErr){
+        // If this is one of the initial accounts and it has not finished
+        // provisioning yet, prepare that account and retry once.
+        if(account && ["auth/user-not-found","auth/invalid-credential"].includes(firstErr?.code)){
+          await provisionInitialAccount(account);
+          await signInWithEmailAndPassword(auth,email,authPassword);
+        }else{
+          throw firstErr;
+        }
+      }
     }catch(err){
+      clearTimeout(loginTimeout);
       console.error("Erro de login:",err);
       const code=err?.code||"";
       if(code==="auth/user-not-found" || code==="auth/invalid-credential" || code==="auth/wrong-password"){
@@ -248,33 +267,30 @@ function renderLogin(error=""){
   };
 }
 
-async function provisionInitialAuthAccounts(){
-  const accounts=[...INITIAL_ADMINS,...INITIAL_USERS];
-  const failures=[];
-  for(const account of accounts){
-    const email=account.cpf===ADMIN_CPF?ADMIN_EMAIL:userEmail(account.cpf);
-    const secondary=initializeApp(firebaseConfig,"provision-"+account.cpf+"-"+Date.now());
-    const secondaryAuth=getAuth(secondary);
+async function provisionInitialAccount(account){
+  const email=account.cpf===ADMIN_CPF?ADMIN_EMAIL:userEmail(account.cpf);
+  const secondary=initializeApp(firebaseConfig,"provision-"+account.cpf+"-"+Date.now());
+  const secondaryAuth=getAuth(secondary);
+  try{
     try{
-      try{
-        await createUserWithEmailAndPassword(
-          secondaryAuth,
-          email,
-          account.password+"HNR"
-        );
-      }catch(err){
-        if(err?.code!=="auth/email-already-in-use") throw err;
-        // The account already exists. Do not overwrite its password here.
-      }
+      await createUserWithEmailAndPassword(secondaryAuth,email,account.password+"HNR");
+      return true;
     }catch(err){
+      if(err?.code==="auth/email-already-in-use") return true;
       console.error("Falha ao preparar conta:",account.cpf,err);
-      failures.push(account.cpf);
-    }finally{
-      try{await signOut(secondaryAuth)}catch(_){}
-      try{await deleteApp(secondary)}catch(_){}
+      return false;
     }
+  }finally{
+    try{await signOut(secondaryAuth)}catch(_){ }
+    try{await deleteApp(secondary)}catch(_){ }
   }
-  return failures;
+}
+
+async function provisionInitialAuthAccounts(){
+  const results=await Promise.allSettled(
+    [...INITIAL_ADMINS,...INITIAL_USERS].map(account=>provisionInitialAccount(account))
+  );
+  return results.filter(r=>r.status==="rejected" || r.value===false).length;
 }
 
 async function ensureAdminAndInitialProfiles(){
@@ -532,7 +548,7 @@ function showNewUserModal(){
   <div class="box"><h2>Novo usuário padrão</h2><div id="modalMsg"></div>
   <form id="newUserForm">
     <div class="grid grid2"><div class="field"><label>Nome</label><input id="uName" required></div><div class="field"><label>Empresa</label><input id="uEmpresa"></div></div>
-    <div class="grid grid2"><div class="field"><label>CPF</label><input id="uCpf" inputmode="numeric" required></div><div class="field"><label>Senha</label><input id="uPass" type="password" minlength="6" required><div class="small muted">A senha informada é a senha usada pelo usuário no login. O sistema adapta internamente ao requisito do Firebase.</div></div></div>
+    <div class="grid grid2"><div class="field"><label>CPF</label><input id="uCpf" inputmode="numeric" required></div><div class="field"><label>Senha</label><input id="uPass" type="password" minlength="5" required><div class="small muted">A senha informada é a senha usada pelo usuário no login. O sistema adapta internamente ao requisito do Firebase.</div></div></div>
     <div class="actions"><button class="btn secondary" type="button" id="cancel">Cancelar</button><button class="btn primary">Cadastrar</button></div>
   </form></div>`;
   document.body.appendChild(m);
@@ -602,28 +618,22 @@ async function resetEvaluation(uid){
   }
 }
 
-let authProvisionReady=false;
-let authProvisionError="";
+let provisioningPromise=null;
 async function boot(){
-  try{
-    const failures=await provisionInitialAuthAccounts();
-    if(failures.length){
-      authProvisionError="Não foi possível preparar algumas contas. Verifique o Firebase Authentication.";
-    }
-  }catch(err){
-    console.error(err);
-    authProvisionError="Não foi possível inicializar a autenticação.";
-  }finally{
-    authProvisionReady=true;
-    if(!currentUser) renderLogin(authProvisionError);
-  }
+  // Login UI is rendered immediately. Account provisioning happens in background.
+  renderLogin();
+  provisioningPromise=provisionInitialAuthAccounts().catch(err=>{
+    console.error("Provisionamento em segundo plano:",err);
+    return 1;
+  });
 }
-// Provisionamento roda em segundo plano e nunca bloqueia a tela de login.
-boot().catch(err=>console.error("Provisionamento em segundo plano:",err));
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
-  if(!user){return}
+  if(!user){
+    renderLogin();
+    return;
+  }
   try{
     if(user.email===ADMIN_EMAIL){
       await ensureAdminAndInitialProfiles();
@@ -637,6 +647,8 @@ onAuthStateChanged(auth,async user=>{
     renderLogin("Não foi possível carregar o sistema. Verifique a configuração do Firebase.");
   }
 });
+
+boot();
 </script>
 
 <!--
