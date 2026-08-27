@@ -25,7 +25,7 @@ label{display:block;font-weight:700;font-size:13px;margin:0 0 7px}.field{margin-
 </style>
 </head>
 <body>
-<div id="app"><div class="wrap"><div class="card login"><div class="body" style="text-align:center;padding:50px">Preparando o sistema...</div></div></div></div>
+<div id="app"></div>
 
 <script type="module">
 import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
@@ -192,7 +192,19 @@ function shell(title,subtitle="",body=""){
   <header class="top"><div><div class="brand">${esc(title)}</div>${subtitle?`<div class="small" style="color:#94a3b8">${esc(subtitle)}</div>`:""}</div>
   ${currentUser?`<button class="btn secondary" id="logoutBtn">Sair</button>`:""}</header>
   <main class="wrap">${body}</main>`;
-  document.getElementById("logoutBtn")?.addEventListener("click",async()=>{await signOut(auth)});
+  document.getElementById("logoutBtn")?.addEventListener("click",async(e)=>{
+    const btn=e.currentTarget;
+    if(btn.disabled)return;
+    btn.disabled=true;
+    btn.innerHTML='<span class="loading"><span class="spinner"></span>Saindo...</span>';
+    try{
+      await signOut(auth);
+    }catch(err){
+      console.error("Erro ao sair:",err);
+      btn.disabled=false;
+      btn.textContent="Sair";
+    }
+  });
 }
 
 function renderLogin(error=""){
@@ -215,10 +227,6 @@ function renderLogin(error=""){
     const cpf=normalizeCPF(document.getElementById("cpf").value);
     const password=document.getElementById("password").value;
     if(!isValidCPF(cpf)){renderLogin("Informe um CPF válido.");return}
-    if(!authProvisionReady){
-      renderLogin("Preparando o sistema de autenticação. Tente novamente em alguns segundos.");
-      return;
-    }
     const form=document.getElementById("loginForm");
     const submit=form.querySelector("button[type=submit]");
     submit.disabled=true;
@@ -610,7 +618,8 @@ async function boot(){
     if(!currentUser) renderLogin(authProvisionError);
   }
 }
-boot();
+// Provisionamento roda em segundo plano e nunca bloqueia a tela de login.
+boot().catch(err=>console.error("Provisionamento em segundo plano:",err));
 
 onAuthStateChanged(auth,async user=>{
   currentUser=user;
