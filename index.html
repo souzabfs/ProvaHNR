@@ -592,6 +592,148 @@ function renderSelfEvaluation(profile,result){
   };
 }
 
+
+async function ensureJsPDF(){
+  if(window.jspdf?.jsPDF) return window.jspdf.jsPDF;
+  await new Promise((resolve,reject)=>{
+    const existing=document.querySelector('script[data-jspdf="1"]');
+    if(existing){
+      existing.addEventListener("load",resolve,{once:true});
+      existing.addEventListener("error",reject,{once:true});
+      return;
+    }
+    const script=document.createElement("script");
+    script.src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    script.async=true;
+    script.dataset.jspdf="1";
+    script.onload=resolve;
+    script.onerror=()=>reject(new Error("Não foi possível carregar o gerador de PDF."));
+    document.head.appendChild(script);
+  });
+  if(!window.jspdf?.jsPDF) throw new Error("Biblioteca de PDF indisponível.");
+  return window.jspdf.jsPDF;
+}
+
+function answerText(q,value){
+  if(value==null || value==="") return "Não respondida";
+  if(q?.options && typeof q.options==="object" && q.options[value]!==undefined) return q.options[value];
+  return String(value);
+}
+
+async function generateEvaluationPDF(profile,result,selfEvaluation){
+  const button=document.activeElement;
+  const originalText=button?.textContent;
+  if(button?.tagName==="BUTTON"){
+    button.disabled=true;
+    button.textContent="Gerando PDF...";
+  }
+  try{
+    const jsPDF=await ensureJsPDF();
+    const pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const margin=15, pageW=210, pageH=297, usableW=pageW-margin*2;
+    let y=18;
+
+    const clean=v=>String(v??"").replace(/\s+/g," ").trim();
+    const safeFile=v=>clean(v).normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"_").replace(/^_+|_+$/g,"")||"usuario";
+    const calc=calculateResult(result);
+    const approved=calc.percentage>=PASSING_PERCENTAGE;
+    const finished=result?.finishedAt ? fmtDate(result.finishedAt) : "—";
+
+    const newPage=()=>{
+      pdf.addPage();
+      y=18;
+    };
+    const ensureSpace=h=>{
+      if(y+h>pageH-15) newPage();
+    };
+    const line=(text,size=10,bold=false,indent=0,spaceAfter=2)=>{
+      pdf.setFont("helvetica",bold?"bold":"normal");
+      pdf.setFontSize(size);
+      const lines=pdf.splitTextToSize(clean(text),usableW-indent);
+      const h=lines.length*(size*0.42+1.6);
+      ensureSpace(h+spaceAfter);
+      pdf.text(lines,margin+indent,y);
+      y+=h+spaceAfter;
+    };
+    const separator=()=>{
+      ensureSpace(5);
+      pdf.setDrawColor(210);
+      pdf.line(margin,y,pageW-margin,y);
+      y+=5;
+    };
+
+    pdf.setFont("helvetica","bold");
+    pdf.setFontSize(16);
+    pdf.text("HNR ENGENHARIA - RESULTADO DA AVALIAÇÃO",margin,y);
+    y+=9;
+    pdf.setFontSize(11);
+    pdf.setFont("helvetica","normal");
+    pdf.text("Avaliação Técnica - Operador de Caldeiras",margin,y);
+    y+=8;
+    separator();
+
+    line(`Nome: ${profile?.name||"—"}`,11,true);
+    line(`CPF: ${profile?.cpf||result?.cpf||"—"}`);
+    line(`Empresa: ${profile?.empresa||"—"}`);
+    line(`Data de conclusão: ${finished}`);
+    separator();
+
+    line(`RESULTADO: ${approved?"APROVADO":"REPROVADO"}`,14,true);
+    line(`Nota: ${calc.percentage}%`);
+    line(`Acertos: ${calc.score} de ${calc.total}`);
+    line(`Critério de aprovação: ${PASSING_PERCENTAGE}%`);
+    separator();
+
+    line("QUESTÕES E RESPOSTAS",13,true);
+    (result?.answers||[]).forEach((a,i)=>{
+      const q=QUESTIONS.find(x=>String(x.id)===String(a.id));
+      const correctKey=q?.correct;
+      const correctText=answerText(q,correctKey);
+      const userText=answerText(q,a.userAnswer);
+      const ok=!!q && (String(a.userAnswer)===String(correctKey) || String(a.userAnswer)===String(correctText));
+      ensureSpace(25);
+      line(`${i+1}. ${q?.text||"Questão não localizada"}`,10,true);
+      line(`Resposta do aluno: ${userText}`,9,false,3);
+      line(`Resposta correta: ${correctText}`,9,false,3);
+      line(`Resultado: ${ok?"CORRETA":"INCORRETA"}`,9,true,3,4);
+    });
+
+    if(selfEvaluation?.answers?.length){
+      separator();
+      line("AUTOAVALIAÇÃO DO APRENDIZADO",13,true);
+      selfEvaluation.answers.forEach((a,i)=>{
+        const qText=a.question || SELF_EVAL_QUESTIONS.find(q=>q.id===a.id)?.text || `Pergunta ${i+1}`;
+        ensureSpace(18);
+        line(`${i+1}. ${qText}`,10,true);
+        line(`Resposta: ${a.answer||"—"}`,9,false,3,4);
+      });
+    }
+
+    separator();
+    line("Documento gerado automaticamente pelo sistema de Avaliação Técnica HNR.",8,false,0,0);
+
+    const pages=pdf.getNumberOfPages();
+    for(let p=1;p<=pages;p++){
+      pdf.setPage(p);
+      pdf.setFont("helvetica","normal");
+      pdf.setFontSize(8);
+      pdf.setTextColor(110);
+      pdf.text(`Página ${p} de ${pages}`,pageW-margin,291,{align:"right"});
+      pdf.setTextColor(0);
+    }
+
+    pdf.save(`Resultado_Avaliacao_${safeFile(profile?.name||profile?.cpf||"usuario")}.pdf`);
+  }catch(err){
+    console.error("Erro ao gerar PDF:",err);
+    alert("Não foi possível gerar o PDF. Verifique a conexão com a internet e tente novamente.");
+  }finally{
+    if(button?.tagName==="BUTTON"){
+      button.disabled=false;
+      if(originalText) button.textContent=originalText;
+    }
+  }
+}
+
 function renderFinalResult(profile,result,selfEvaluation){
   const calculated=calculateResult(result);
   const approved=calculated.percentage>=PASSING_PERCENTAGE;
@@ -612,7 +754,8 @@ function renderFinalResult(profile,result,selfEvaluation){
         <div class="result-stat"><span class="muted small">MÍNIMO P/ APROVAÇÃO</span><strong>${PASSING_PERCENTAGE}%</strong></div>
       </div>
       <div class="actions" style="justify-content:center">
-        <button class="btn secondary" id="reviewBtn">Conferir respostas</button>
+        <button type="button" class="btn secondary" id="reviewBtn">Conferir respostas</button>
+        <button type="button" class="btn primary" id="pdfBtn">Baixar resultado em PDF</button>
       </div>
     </div>
 
@@ -622,16 +765,24 @@ function renderFinalResult(profile,result,selfEvaluation){
       <p class="muted">Sua percepção é importante para melhorar o treinamento, o conteúdo e a experiência de aprendizagem.</p>
     </div>
 
-    <div id="reviewArea" class="card review hidden" style="max-width:880px;margin:16px auto">
+    <div id="reviewArea" class="card review" hidden style="max-width:880px;margin:16px auto">
       <h2>Conferência da prova</h2>
       ${result.answers.map((a,i)=>{
-        const q=QUESTIONS.find(x=>x.id===a.id);
-        const correctText=q?.options?.[q?.correct];
-        const ok=q && (a.userAnswer===correctText || a.userAnswer===q.correct);
-        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Resposta correta: <b>${esc(correctText||"—")}</b></p></div>`
+        const q=QUESTIONS.find(x=>String(x.id)===String(a.id));
+        const correctText=answerText(q,q?.correct);
+        const userText=answerText(q,a.userAnswer);
+        const ok=q && (String(a.userAnswer)===String(q.correct) || String(userText)===String(correctText));
+        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Sua resposta: <b>${esc(userText)}</b></p><p class="correct">Resposta correta: <b>${esc(correctText||"—")}</b></p></div>`
       }).join("")}
     </div>`);
-  document.getElementById("reviewBtn").onclick=()=>document.getElementById("reviewArea").classList.toggle("hidden");
+  const reviewBtn=document.getElementById("reviewBtn");
+  const reviewArea=document.getElementById("reviewArea");
+  reviewBtn.addEventListener("click",()=>{
+    reviewArea.hidden=!reviewArea.hidden;
+    reviewBtn.textContent=reviewArea.hidden?"Conferir respostas":"Ocultar respostas";
+    if(!reviewArea.hidden) reviewArea.scrollIntoView({behavior:"smooth",block:"start"});
+  });
+  document.getElementById("pdfBtn").addEventListener("click",()=>generateEvaluationPDF(profile,result,selfEvaluation));
 }
 
 async function renderAdmin(){
@@ -745,10 +896,11 @@ async function showEvaluation(uid){
     <div class="review">
       <h3>Respostas da prova</h3>
       ${r.answers.map((a,i)=>{
-        const q=QUESTIONS.find(x=>x.id===a.id);
-        const correctText=q?.options?.[q?.correct];
-        const ok=q && (a.userAnswer===correctText || a.userAnswer===q.correct);
-        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(a.userAnswer||"Não respondida")}</b></p><p class="correct">Correta: <b>${esc(correctText||"—")}</b></p></div>`
+        const q=QUESTIONS.find(x=>String(x.id)===String(a.id));
+        const correctText=answerText(q,q?.correct);
+        const userText=answerText(q,a.userAnswer);
+        const ok=q && (String(a.userAnswer)===String(q.correct) || String(userText)===String(correctText));
+        return `<div class="review-item"><b>${i+1}. ${esc(q?.text||"")}</b><p class="${ok?"correct":"wrong"}">Resposta do usuário: <b>${esc(userText)}</b></p><p class="correct">Correta: <b>${esc(correctText||"—")}</b></p></div>`
       }).join("")}
     </div>
     <div class="eval-summary">
@@ -757,9 +909,13 @@ async function showEvaluation(uid){
         ? selfData.answers.map((a,i)=>`<div class="review-item"><b>${i+1}. ${esc(a.question||SELF_EVAL_QUESTIONS.find(q=>q.id===a.id)?.text||"")}</b><p>${esc(a.answer||"—")}</p></div>`).join("")
         : '<div class="alert info">O usuário ainda não concluiu a autoavaliação.</div>'}
     </div>
-    <button class="btn secondary" id="close">Fechar</button>
+    <div class="actions" style="margin-top:18px;justify-content:flex-end">
+      <button type="button" class="btn primary" id="adminPdfBtn">Baixar resultado em PDF</button>
+      <button type="button" class="btn secondary" id="close">Fechar</button>
+    </div>
   </div>`;
   document.body.appendChild(m);
+  m.querySelector("#adminPdfBtn").onclick=()=>generateEvaluationPDF(u||{cpf:r.cpf},r,selfData);
   m.querySelector("#close").onclick=()=>m.remove();
 }
 
@@ -914,6 +1070,8 @@ FIREBASE AUTHENTICATION
    Marilon Vidal — 083.289.824-47 — 95430
    Yonald Ribeiro — 292.000.674-68 — 30764
    José Helio — 108.651.704-01 — 12859
+   Teste — 111.111.111-11 — 12345
+   Teste2 — 222.222.222-22 — 12345
 
 4. O administrador continua podendo cadastrar novos usuários pelo painel.
 
